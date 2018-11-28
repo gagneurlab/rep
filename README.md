@@ -1,3 +1,3 @@
 # REP
 
-RNA Expression project
+RNA Expression prediction
