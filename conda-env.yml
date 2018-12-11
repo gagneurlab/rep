@@ -23,14 +23,21 @@ dependencies:
   - concise>=0.6.5
   - tensorflow-gpu==1.7
   - keras>=2.0.4
-  - scikit-learn
+  - scikit-learn>=0.19.1
   - tqdm
   - ipykernel
   - joblib
-  - matplotlib
+  - matplotlib>=2.2
   - plotnine
   - seaborn
   - line_profiler
   - ipython
   - ipython-autotime
   - autopep8
+  - anndata>=0.6.13
+  - scipy
+  - tables
+  - statsmodels
+  - networkx
+  - natsort
+  - scanpy
