@@ -33,3 +33,4 @@ dependencies:
   - line_profiler
   - ipython
   - ipython-autotime
+  - autopep8
