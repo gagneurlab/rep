@@ -4,40 +4,24 @@ channels:
 - conda-forge
 - defaults
 dependencies:
-- python=3.6
+- python>=3.6
 - pyvcf
-- cyvcf2
-- pybedtools
-- genomelake
-- pysam
-- wiggletools
 - cython
 - h5py
 - numpy
 - nb_conda
 - pandas>=0.23.0
 - pip:
-  - kipoi
-  - snakemake
-  - gin-train
-  - concise>=0.6.5
-  - tensorflow-gpu==1.7
-  - keras>=2.0.4
-  - scikit-learn>=0.19.1
-  - tqdm
-  - ipykernel
-  - joblib
-  - matplotlib>=2.2
-  - plotnine
-  - seaborn
-  - line_profiler
-  - ipython
-  - ipython-autotime
   - autopep8
   - anndata>=0.6.13
-  - scipy
   - tables
-  - statsmodels
-  - networkx
-  - natsort
   - scanpy
+  - python-igraph
+  - louvain
+  - ipython
+  - ipython-autotime
+  - argh
+
+
+
+
