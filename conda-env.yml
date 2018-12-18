@@ -21,6 +21,8 @@ dependencies:
   - ipython
   - ipython-autotime
   - argh
+  - pysam==0.9.1
+  - pybedtools
 
 
 
