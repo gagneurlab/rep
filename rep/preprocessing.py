@@ -19,7 +19,7 @@ from itertools import combinations
 import traceback
 
 import numpy
-import scanpy
+# import scanpy
 import anndata
 import pandas as pd
 
@@ -151,12 +151,19 @@ def filter_df_by_value(df, jsonFilters):
         if key == 0: # index of data.frame
             names = list(set(names) & set(jsonFilters[key]))
             continue
+
         # regular columns
+        name_per_key = []
         for val in jsonFilters[key]:
+
             # get index of rows which column matches certain value
             aux_names = df.index[df[key] == val].tolist()
+
             # intersect 2 lists
-            names = list(set(names) & set(aux_names))
+            name_per_key = list(set(name_per_key) | set(aux_names))
+
+        names = list(set(names) & set(name_per_key))
+
 
     # rows which mach all filtering criteria
     return names
@@ -339,7 +346,7 @@ def rnaseq_cross_tissue(anndata_obj, var_names, obs_names=None, target_transform
 
     print("4.3 Slice anndata")
     print()
-    anndata_filtered_var = annobj[:, var_names]
+    anndata_filtered_var = anndata_obj[:, var_names]
     anndata_sliced = anndata_filtered_var[obs_names, :]
     print_anndata(anndata_sliced)
 
