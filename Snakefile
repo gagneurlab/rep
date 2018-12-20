@@ -20,7 +20,7 @@ def startswith_any(x, exclude_list):
 rule all:
     input:
         [TARGET_DIR / Path(x).with_suffix(".html")  # ipynb -> html in TARGET_DIR
-         for x in glob('src/**/*ipynb', recursive=True)  # all ipynb
+         for x in glob('notebooks/**/*ipynb', recursive=True)  # all ipynb
          if not startswith_any(x, exclude)]  # exclude
 
 

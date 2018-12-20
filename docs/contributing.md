@@ -1,4 +1,4 @@
-## Extending rep
+# Extending rep
 
 - all ipynb or other analysis scripts should go to the appropriate folder / sub-folder under `src`. If you work on `chipseq`, 
 make a new folder in `src/chipseq` (e.g. `src/chipseq/my_folder`)

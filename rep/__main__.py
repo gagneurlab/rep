@@ -21,14 +21,14 @@ def main():
     # parser.add_commands([wc_l])
     # argh.dispatch(parser)
 
-    gtex = GTEx()
-
-    print("1. Load GTEx data:")
-    gtex.load_count_matrix("../data.csv", sep=",", varanno="../anno.csv", obsanno="../anno_obs.csv")
-    gtex.get_count_matrix()
-
-
-    print("2. Filter data:")
+    # gtex = GTEx()
+    #
+    # print("1. Load GTEx data:")
+    # gtex.load_count_matrix("../data.csv", sep=",", varanno="../anno.csv", obsanno="../anno_obs.csv")
+    # gtex.get_count_matrix()
+    #
+    #
+    # print("2. Filter data:")
 
 if __name__ == "__main__":
     main()
