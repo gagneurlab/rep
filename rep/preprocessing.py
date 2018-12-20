@@ -23,7 +23,7 @@ import numpy
 import anndata
 import pandas as pd
 
-from constants import ANNDATA_CST as a
+from rep.constants import ANNDATA_CST as a
 
 
 def print_anndata(toprintanndata):
@@ -47,7 +47,7 @@ def load_vars(obj, csvfile, sep=","):
     """
 
     if csvfile:
-        varaux = pd.DataFrame(pd.read_csv(os.path.abspath(csvfile), header=None, delimiter=sep, index_col=0))
+        varaux = pd.DataFrame(pd.read_csv(os.path.abspath(csvfile), header=0, delimiter=sep, index_col=0))
         obj.var = varaux
         obj.var_names = list(varaux.index)
 
@@ -145,8 +145,8 @@ def filter_df_by_value(df, jsonFilters):
     :param jsonFilters: json file, where key is the column, and value are the admited (filtering) values
     :return: row.names for which the filtering applies
     """
-    print("4.1 In filter_df_by_value...")
     names = list(df.index)
+
     for key in jsonFilters:
         if key == 0: # index of data.frame
             names = list(set(names) & set(jsonFilters[key]))
@@ -157,7 +157,7 @@ def filter_df_by_value(df, jsonFilters):
         for val in jsonFilters[key]:
 
             # get index of rows which column matches certain value
-            aux_names = df.index[df[key] == val].tolist()
+            aux_names = df.index[df[str(key)] == val].tolist()
 
             # intersect 2 lists
             name_per_key = list(set(name_per_key) | set(aux_names))
@@ -185,7 +185,7 @@ def filter_anndata_by_value(annobj, jsonFilters):
                     }
     :return: tuple (filtered var_names, filtered obs_names) - use this output as input to filter the count matrix (anndata.X)
     """
-
+    print(annobj.var)
     for key in jsonFilters:
         if key == a.VAR:  # filtering by var (col)
             filtered_var_names = filter_df_by_value(annobj.var, jsonFilters[key])
@@ -256,7 +256,7 @@ def group_by(df, column, index_subset):
     :return: {'value':[list of index_subset matching the value]}
     """
     dict = {}
-    df_new = df.groupby(column)
+    df_new = df.groupby(str(column))
     for group in df_new.groups:
         # rearrage the index_subset by grouping over e.g. tissue
         dict[group] = list(set(list(df_new.groups[group])) & set(index_subset))
@@ -306,7 +306,7 @@ def build_x_y(annobj, cross_list):
     return (df_X, df_Y)
 
 
-def rnaseq_cross_tissue(anndata_obj, var_names, obs_names=None, target_transform=None, target_transform_param=None,
+def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=None, target_transform_param=None,
                         input_transform=None, input_transform_param=None, shuffle=False):
     """
     Prepare the traning data by:
@@ -317,37 +317,42 @@ def rnaseq_cross_tissue(anndata_obj, var_names, obs_names=None, target_transform
         this uses var_names and obs_names. These can be either a list of keys or a dictionary (grouping the samples
         by condition - this means the pairs will be generated only within a group)
 
-    :param anndata_obj:
-    :param var_names: (sample_ids/cols) in the summarized experiment
-    :param obs_names: (gene_ids/rows) in the summarized experiment
-    :param traget_transform: reference to a function  function
-    :param traget_transform_param: parameters for the target transform function (tuple)
-    :param input_transform: reference to a function
-    :param input_transform_param: parameters for the input transform function (tuple)
-    :param shuffle:
-    :return: (df.X,df.Y) # index=sample_tissue
+    Args:
+        anndata_obj: h5ad format
+        individuals: (individuals) in the summarized experiment (assume there is a row called Individuals)
+        obs_names: (gene_ids/rows) in the summarized experiment
+        traget_transform: reference to a function  function
+        input_transform: reference to a function
+        shuffle (bool):
+    Return:
+        (df.X,df.Y) # index=sample_tissue
 
     """
-    print("4.2 Compute all pairs...")
-    print()
+
+    # get samples
+    sample_ids = filter_df_by_value(anndata_obj.var,{'Individual':individuals})
+    sample_ids = group_by(anndata_obj.var, 'Individual', sample_ids)
+
     n = 2  # pairs of tissues
     cross_list = []
 
-    if isinstance(var_names, (list,)):
-        cross_list = arrangements(var_names, n)
+    if isinstance(sample_ids, (list,)):
+        cross_list = arrangements(sample_ids, n)
 
-    if isinstance(var_names, dict):
-        var_names_aux = []
-        for key in var_names:
-            cross_list += arrangements(var_names[key], n)
+    if isinstance(sample_ids, dict):
+        individuals_aux = []
+        for key in sample_ids:
+            cross_list += arrangements(sample_ids[key], n)
+
             # flatten var_names dict
-            var_names_aux += var_names[key]
-        var_names = list(set(var_names_aux))
+            individuals_aux += sample_ids[key]
+
+        individuals = list(set(individuals_aux))
 
     print("4.3 Slice anndata")
     print()
-    anndata_filtered_var = anndata_obj[:, var_names]
-    anndata_sliced = anndata_filtered_var[obs_names, :]
+    anndata_filtered_var = anndata_obj[:, individuals]
+    anndata_sliced = anndata_filtered_var[gene_ids, :]
     print_anndata(anndata_sliced)
 
     print("4.4 Build the two matrices X and Y")
