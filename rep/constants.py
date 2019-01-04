@@ -1,5 +1,5 @@
 
 
 class ANNDATA_CST:
-    OBS = 'obs'
-    VAR = 'var'
+    GENES = 'genes'
+    SAMPLES = 'samples'
