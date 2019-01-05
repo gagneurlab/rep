@@ -20,11 +20,13 @@ import traceback
 
 import numpy
 # import scanpy
+import math
 import anndata
 import pandas as pd
 
 sys.path.append('E:\\rep\\rep')
 from rep.constants import ANNDATA_CST as a
+
 
 def print_anndata(toprintanndata):
     print("anndata.X ----")
@@ -35,8 +37,10 @@ def print_anndata(toprintanndata):
     print(toprintanndata.obs)
     print()
 
-def load_df(csvfile,header=None,delimiter=",",index_col=0):
+
+def load_df(csvfile, header=None, delimiter=",", index_col=0):
     return pd.DataFrame(pd.read_csv(os.path.abspath(csvfile), header=header, delimiter=delimiter, index_col=index_col))
+
 
 def load_samples(obj, csvfile, sep=","):
     """Load samples (columns) description for the summarized experiment
@@ -112,6 +116,7 @@ def load_count_matrix(obj, filename, sep=","):
 
     return annobj
 
+
 def create_anndata(counts_file, samples_anno=None, genes_anno=None, sep=","):
     """Creates an AnnData Object
 
@@ -124,10 +129,10 @@ def create_anndata(counts_file, samples_anno=None, genes_anno=None, sep=","):
     Returns:
         AnnData object
     """
-    x = load_df(counts_file,header=0,delimiter=sep)
+    x = load_df(counts_file, header=0, delimiter=sep)
     annobj = anndata.AnnData(X=x)
-    load_genes(annobj,genes_anno,sep)
-    load_samples(annobj,samples_anno,sep)
+    load_genes(annobj, genes_anno, sep)
+    load_samples(annobj, samples_anno, sep)
 
     return annobj
 
@@ -178,14 +183,13 @@ def filter_df_by_value(df, jsonFilters):
     """
     names = list(df.index)
     for key in jsonFilters:
-        if key == 0: # index of data.frame
+        if key == 0:  # index of data.frame
             names = list(set(names) & set(jsonFilters[key]))
             continue
 
         # regular columns
         name_per_key = []
         for val in jsonFilters[key]:
-
             # get index of rows which column matches certain value
             aux_names = df.index[df[str(key)] == val].tolist()
 
@@ -375,7 +379,7 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
     """
 
     # get samples
-    sample_ids = filter_df_by_value(anndata_obj.var,{'Individual':individuals})
+    sample_ids = filter_df_by_value(anndata_obj.var, {'Individual': individuals})
     sample_ids = group_by(anndata_obj.var, 'Individual', sample_ids)
 
     n = 2  # pairs of tissues
@@ -407,6 +411,43 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
     return (X, Y)
 
 
+def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], stratified=True, shuffle=False):
+    """Split dataset using stratified individuals by Gender,
+
+    Args:
+        annobj (:obj:AnnData):
+        percent (list(float,float,float)): split fraction for train valid and test
+        stratified (bool):
+        shuffle (bool):
+
+    Returns:
+        (train_individuals,valid_individuals, test_individuals)
+    """
+
+    # Stratify
+    df = annobj.var.reset_index()[['Individual','Seq','Gender']]
+    df.drop_duplicates(inplace = True)
+    df_grouped = df.groupby(['Gender', 'Seq'], as_index=False)
+
+    train_individuals = []
+    valid_individuals = []
+    test_individuals = []
+    for name, group in df_grouped:  # get same fraction from each group
+        if group.shape[0] > 3:
+            index_aux = list(map(lambda x: math.ceil(group.shape[0] * x), fraction))
+        elif group.shape[0] == 3:
+            index_aux = [1,1,1]
+        elif group.shape[0] == 2:
+            index_aux = [1,0,1]
+        else:
+            index_aux = [1,0,0]
+
+        train_individuals += group.iloc[:index_aux[0],:]['Individual'].tolist()
+        valid_individuals += group.iloc[index_aux[0]: (index_aux[0] + index_aux[1]),:]['Individual'].tolist()
+        test_individuals += group.iloc[(index_aux[0] + index_aux[1]):,:]['Individual'].tolist()
+
+    return (train_individuals,valid_individuals,test_individuals)
+
 if __name__ == '__main__':
 
     # assembling:
@@ -421,26 +462,38 @@ if __name__ == '__main__':
         # run example
 
         # create a summarized experiment
-        print("1. Read csv + anno matrices:")
-        print()
-        annobj = create_anndata("../data.csv", sep=",", samples_anno="../anno.csv", genes_anno="../anno_obs.csv")
-        save(annobj)
+        # print("1. Read csv + anno matrices:")
+        # print()
+        # annobj = create_anndata("../data.csv", sep=",", samples_anno="../anno.csv", genes_anno="../anno_obs.csv")
+        # save(annobj,"test.h5ad")
 
         print("1*.Reload from file HDF5")
         print()
-        annobj = load("tmp1546646421.h5ad")
+        annobj = load("test.h5ad")
         print_anndata(annobj)
-        # filter
-        print("4. Filter by value anndata.var and anndata.obs")
-        print()
-        (var, obs) = filter_anndata_by_value(annobj, {a.SAMPLES : {"Gender": ['M']},
-                                                   a.GENES: {0: ['G1', 'G2']}})
+
+        print("2. Stratify individuals")
+        (train,valid,test) = split_by_individuals(annobj)
+        print(train,valid,test)
+
+        (X_train, Y_train) = rnaseq_cross_tissue(annobj, individuals=train, gene_ids=annobj.obs_names)
+        (X_valid, Y_valid) = rnaseq_cross_tissue(annobj, individuals=valid, gene_ids=annobj.obs_names)
+        (X_test, Y_test) = rnaseq_cross_tissue(annobj, individuals=test, gene_ids=annobj.obs_names)
+
+        print(X_train)
+        print(Y_train)
+
+        # # filter
+        # print("4. Filter by value anndata.var and anndata.obs")
+        # print()
+        # (var, obs) = filter_anndata_by_value(annobj, {a.SAMPLES : {"Gender": ['M']},
+        #                                            a.GENES: {0: ['G1', 'G2']}})
 
         # stratify and compute the cross tissue
-        (X, Y) = rnaseq_cross_tissue(annobj, individuals=['Indiv1'], gene_ids=annobj.obs_names)
-        print(X)
-        print()
-        print(Y)
+        # (X, Y) = rnaseq_cross_tissue(annobj, individuals=['Indiv1'], gene_ids=annobj.obs_names)
+        # print(X)
+        # print()
+        # print(Y)
 
         # not working - https://github.com/theislab/anndata/issues/84
         # # save in the h5ad format
