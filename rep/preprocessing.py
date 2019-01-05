@@ -28,11 +28,11 @@ from rep.constants import ANNDATA_CST as a
 
 def print_anndata(toprintanndata):
     print("anndata.X ----")
-    print(toprintanndata.X[:3,:3])
+    print(toprintanndata.X)
     print("anndata.var ----")
-    print(toprintanndata.var.iloc[:3,:3])
+    print(toprintanndata.var)
     print("anndata.obs ----")
-    print(toprintanndata.obs.iloc[:3,:3])
+    print(toprintanndata.obs)
     print()
 
 def load_df(csvfile,header=None,delimiter=",",index_col=0):
@@ -424,7 +424,12 @@ if __name__ == '__main__':
         print("1. Read csv + anno matrices:")
         print()
         annobj = create_anndata("../data.csv", sep=",", samples_anno="../anno.csv", genes_anno="../anno_obs.csv")
+        save(annobj)
 
+        print("1*.Reload from file HDF5")
+        print()
+        annobj = load("tmp1546646421.h5ad")
+        print_anndata(annobj)
         # filter
         print("4. Filter by value anndata.var and anndata.obs")
         print()
@@ -432,7 +437,7 @@ if __name__ == '__main__':
                                                    a.GENES: {0: ['G1', 'G2']}})
 
         # stratify and compute the cross tissue
-        (X, Y) = rnaseq_cross_tissue(annobj, individuals=, gene_ids=annobj.obs_names)
+        (X, Y) = rnaseq_cross_tissue(annobj, individuals=['Indiv1'], gene_ids=annobj.obs_names)
         print(X)
         print()
         print(Y)
