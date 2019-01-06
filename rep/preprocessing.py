@@ -39,7 +39,7 @@ def print_anndata(toprintanndata):
 
 
 def load_df(csvfile, header=None, delimiter=",", index_col=0):
-    return pd.DataFrame(pd.read_csv(os.path.abspath(csvfile), header=header, delimiter=delimiter, index_col=index_col))
+    return pd.read_csv(os.path.abspath(csvfile), header=header, delimiter=delimiter, index_col=index_col)
 
 
 def load_samples(obj, csvfile, sep=","):
@@ -379,30 +379,30 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
     """
 
     # get samples
-    sample_ids = filter_df_by_value(anndata_obj.var, {'Individual': individuals})
-    sample_ids = group_by(anndata_obj.var, 'Individual', sample_ids)
+    samples_df = anndata_obj.var
+    sample_ids = filter_df_by_value(samples_df, {'Individual': individuals})
+    sample_ids = group_by(samples_df, 'Individual', sample_ids)
 
     n = 2  # pairs of tissues
     cross_list = []
-
+    samples = []
     if isinstance(sample_ids, (list,)):
         cross_list = arrangements(sample_ids, n)
 
     if isinstance(sample_ids, dict):
-        individuals_aux = []
+        sample_aux = []
         for key in sample_ids:
             cross_list += arrangements(sample_ids[key], n)
 
             # flatten var_names dict
-            individuals_aux += sample_ids[key]
+            sample_aux += sample_ids[key]
 
-        individuals = list(set(individuals_aux))
+        samples = list(set(sample_aux))
 
     print("4.3 Slice anndata")
     print()
-    anndata_filtered_var = anndata_obj[:, individuals]
+    anndata_filtered_var = anndata_obj[:, samples]
     anndata_sliced = anndata_filtered_var[gene_ids, :]
-    print_anndata(anndata_sliced)
 
     print("4.4 Build the two matrices X and Y")
     print()
@@ -411,11 +411,11 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
     return (X, Y)
 
 
-def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], stratified=True, shuffle=False):
-    """Split dataset using stratified individuals by Gender,
-
+def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Gender','Seq'], stratified=True, shuffle=False):
+    """Split dataset using stratified individuals by Gender ..
+    
     Args:
-        annobj (:obj:AnnData):
+        annobj (:obj:AnnData): Assumes a column its named Individual
         percent (list(float,float,float)): split fraction for train valid and test
         stratified (bool):
         shuffle (bool):
@@ -425,9 +425,9 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], stratified=T
     """
 
     # Stratify
-    df = annobj.var.reset_index()[['Individual','Seq','Gender']]
+    df = annobj.var.reset_index()[['Individual'] + groupby]
     df.drop_duplicates(inplace = True)
-    df_grouped = df.groupby(['Gender', 'Seq'], as_index=False)
+    df_grouped = df.groupby(groupby, as_index=False)
 
     train_individuals = []
     valid_individuals = []

@@ -24,6 +24,7 @@ dependencies:
   - pysam==0.9.1
   - pybedtools
   - matplotlib
+  - jupyter_contrib_nbextensions
 
 
 
