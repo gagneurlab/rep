@@ -25,6 +25,7 @@ dependencies:
   - pybedtools
   - matplotlib
   - jupyter_contrib_nbextensions
+  - plotly
 
 
 
