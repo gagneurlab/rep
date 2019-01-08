@@ -23,8 +23,9 @@ import numpy
 import math
 import anndata
 import pandas as pd
+import numpy as np
+from scipy import sparse
 
-sys.path.append('E:\\rep\\rep')
 from rep.constants import ANNDATA_CST as a
 
 
@@ -32,9 +33,9 @@ def print_anndata(toprintanndata):
     print("anndata.X ----")
     print(toprintanndata.X)
     print("anndata.var ----")
-    print(toprintanndata.var)
+    print(toprintanndata.var[:5,:5])
     print("anndata.obs ----")
-    print(toprintanndata.obs)
+    print(toprintanndata.obs[:5,:5])
     print()
 
 
@@ -336,24 +337,31 @@ def build_x_y(annobj, cross_list):
     """
     # create indexes
     length = len(annobj.obs_names)
-    index = []
-    for i, (x, y) in enumerate(cross_list):
-        index.append(str(str(x) + "_" + str(y)))
+    index_elem = [str(str(x) + "_" + str(y)) for i, (x,y) in enumerate(cross_list)]
 
-    df_X = pd.DataFrame(index=index, columns=annobj.obs_names)
-    df_Y = pd.DataFrame(index=index, columns=annobj.obs_names)
-
+    df_X = pd.DataFrame(index=annobj.obs_names, columns=index_elem)
+    df_Y = pd.DataFrame(index=annobj.obs_names, columns=index_elem)
+    
+    print("Total pairs: " + str(len(cross_list)))
+    
+    # build accessing dictionary
+    access = {x:i for i,x in enumerate(annobj.var_names)}
+    
+    # convert to sparse matrix
+    m = sparse.csr_matrix(np.matrix(annobj.X))
+    
     for i, (x, y) in enumerate(cross_list):
         custom_index = str(str(x) + "_" + str(y))
+        
+        # add X
+        vector = m[:,access[x]]
+        df_X.loc[:,custom_index] = vector
+        
+        # add Y
+        vector = m[:,access[y]]
+        df_Y.loc[:,custom_index] = vector
 
-        vector = annobj[:, [x]].X
-        df_X.loc[custom_index] = vector.reshape(1, length)
-
-        vector = annobj[:, [y]].X
-        df_Y.loc[custom_index] = vector.reshape(1, length)
-
-    return (df_X, df_Y)
-
+    return (df_X.T, df_Y.T)
 
 def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=None,
                         input_transform=None, shuffle=False):
@@ -393,23 +401,19 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
         sample_aux = []
         for key in sample_ids:
             cross_list += arrangements(sample_ids[key], n)
-
+            
             # flatten var_names dict
             sample_aux += sample_ids[key]
 
         samples = list(set(sample_aux))
 
-    print("4.3 Slice anndata")
-    print()
     anndata_filtered_var = anndata_obj[:, samples]
-    anndata_sliced = anndata_filtered_var[gene_ids, :]
-
-    print("4.4 Build the two matrices X and Y")
-    print()
+    anndata_sliced = anndata_filtered_var[gene_ids,:]
+    
     (X, Y) = build_x_y(anndata_sliced, cross_list)
-
+    print("4.4 Build the two matrices X and Y")
+    
     return (X, Y)
-
 
 def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Gender','Seq'], stratified=True, shuffle=False):
     """Split dataset using stratified individuals by Gender ..
@@ -427,8 +431,11 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
     # Stratify
     df = annobj.var.reset_index()[['Individual'] + groupby]
     df.drop_duplicates(inplace = True)
+    print(df.shape)
+    print(df[:10])
     df_grouped = df.groupby(groupby, as_index=False)
-
+    print(df_grouped)
+    
     train_individuals = []
     valid_individuals = []
     test_individuals = []
