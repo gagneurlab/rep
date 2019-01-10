@@ -33,9 +33,9 @@ def print_anndata(toprintanndata):
     print("anndata.X ----")
     print(toprintanndata.X)
     print("anndata.var ----")
-    print(toprintanndata.var[:5,:5])
+    print(toprintanndata.var.iloc[:5,:5])
     print("anndata.obs ----")
-    print(toprintanndata.obs[:5,:5])
+    print(toprintanndata.obs.iloc[:5,:5])
     print()
 
 
@@ -123,8 +123,8 @@ def create_anndata(counts_file, samples_anno=None, genes_anno=None, sep=","):
 
     Args:
         counts_file (str): file containing the counts
-        samples_anno (str):
-        genes_anno:
+        samples_anno (str): file containing sampple annotation
+        genes_anno (str): file containing genes annotation
         sep:
 
     Returns:
@@ -411,16 +411,128 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
     anndata_sliced = anndata_filtered_var[gene_ids,:]
     
     (X, Y) = build_x_y(anndata_sliced, cross_list)
-    print("4.4 Build the two matrices X and Y")
     
     return (X, Y)
+
+
+def sum_tissues_per_individual(info, individuals):
+    return sum(info[x] for x  in info if x in individuals)
+
+def remove_best(real,expected,subset,tissue_info,epsilon,n_samples):
+    
+    print("remove best")
+    min_error = 1
+    sample_id = None
+    
+    for i in range(len(subset)): 
+        f = float(sum_tissues_per_individual(tissue_info, subset[:i] + subset[i+1:])/n_samples)
+                
+        if -epsilon <= (expected - f) <= epsilon: # found optimun
+            
+            sample_id = subset[i]
+            subset.pop(i)
+            
+            print("Min error: ", expected - f)
+            print(sample_id)
+            
+            return sample_id
+        
+        diff = abs(expected - f)
+        
+        if diff<=min_error:
+            sample_id = subset[i]
+            min_error = diff
+    
+    subset.remove(sample_id)
+    
+    print("Min error: ",min_error)
+    print(sample_id)
+    
+    return sample_id
+        
+    
+
+def rebalance(train, valid, test, tissues_info, n_samples, fraction=[3. / 5, 1. / 5, 1. / 5]):
+    """Rebalance train valid test to be proportional also in terms of number of tissues.
+       The initial split its using the Invidivuals and not the #samples, so it might be that some individuals
+       have more samples as other
+    
+    Args:
+        train (list): list of individuals included for the training set
+        valid (list):
+        test (list):
+        n_samples (int): number of samples
+        tissue_info (dict): {'Individual':#tissues} - dict holding the tissue counts per individual 
+        
+        fraction (bool): (list(float,float,float)): split fraction for train valid and test
+
+    Returns:
+        (train_individuals,valid_individuals, test_individuals)
+    """
+    
+    sets = [train, valid, test]
+    balanced = False
+    i = 1
+    iterations = 100
+    epsilon = 0.0001
+    
+    while(not balanced and i < iterations):
+        
+        print("Iteration: ", i)
+        i += 1
+        
+        
+        # check if the train valid test are balances in terms of samples
+        (c_train, c_valid, c_test) = (sum_tissues_per_individual(tissues_info, sets[0]),
+                                      sum_tissues_per_individual(tissues_info, sets[1]),
+                                      sum_tissues_per_individual(tissues_info, sets[2]))
+
+        # print state
+        print("\tExpc counts: ", [math.floor(x*n_samples) for x in fraction])
+        print("\tReal counts: ", c_train, c_valid, c_test)
+
+
+        (f_train, f_valid, f_test) = (float(c_train/n_samples),
+                                      float(c_valid/n_samples),
+                                      float(c_test/n_samples))
+
+        print("\tExpc fraction: ", fraction)
+        print("\tReal fraction: ", f_train, f_valid, f_test)
+        
+        
+        # compute difference
+        measured_fractions = [f_train, f_valid, f_test]        
+        diff =  list(np.array(measured_fractions) - np.array(fraction))
+        print("\tDiff: ",diff)
+        # swap elements
+        count_balanced = 0
+        for k, f in enumerate(diff):
+
+            # if the subset already balanced
+            if -epsilon <= f <= epsilon:
+                count_balanced += 1
+                continue
+            
+            if f > 0: # to many samples 
+                sample_id = remove_best(measured_fractions[k],fraction[k],sets[k],tissues_info,epsilon,n_samples)
+                
+                # add this to the next group
+                sets[(k+1)%3].append(sample_id)
+        
+        
+        if count_balanced == len(sets):
+            balanced = True
+        
+    
+    return sets
+
 
 def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Gender','Seq'], stratified=True, shuffle=False):
     """Split dataset using stratified individuals by Gender ..
     
     Args:
         annobj (:obj:AnnData): Assumes a column its named Individual
-        percent (list(float,float,float)): split fraction for train valid and test
+        fraction (list(float,float,float)): split fraction for train valid and test
         stratified (bool):
         shuffle (bool):
 
@@ -431,10 +543,7 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
     # Stratify
     df = annobj.var.reset_index()[['Individual'] + groupby]
     df.drop_duplicates(inplace = True)
-    print(df.shape)
-    print(df[:10])
     df_grouped = df.groupby(groupby, as_index=False)
-    print(df_grouped)
     
     train_individuals = []
     valid_individuals = []
@@ -448,10 +557,19 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
             index_aux = [1,0,1]
         else:
             index_aux = [1,0,0]
-
+        
         train_individuals += group.iloc[:index_aux[0],:]['Individual'].tolist()
         valid_individuals += group.iloc[index_aux[0]: (index_aux[0] + index_aux[1]),:]['Individual'].tolist()
         test_individuals += group.iloc[(index_aux[0] + index_aux[1]):,:]['Individual'].tolist()
+        
+        
+    # count tissues per individual
+    info_tissues = {indiv: annobj.var[annobj.var['Individual'] == indiv].shape[0] for indiv in df['Individual'].tolist()}
+    print("Total individuals: " + str(len(df['Individual'].tolist())))
+   
+    print("Individual split before balancing: ", len(train_individuals),len(valid_individuals),len(test_individuals))
+    
+    rebalance(train_individuals,valid_individuals,test_individuals,info_tissues,annobj.var.shape[0])
 
     return (train_individuals,valid_individuals,test_individuals)
 
