@@ -28,7 +28,11 @@ from scipy import sparse
 
 from rep.constants import ANNDATA_CST as a
 
-
+def mylog(df):
+    """log2(df) using pseudocounts
+    """
+    return df.apply(lambda x: math.log(x+0.001))
+    
 def print_anndata(toprintanndata):
     print("anndata.X ----")
     print(toprintanndata.X)
@@ -284,8 +288,9 @@ def save(annobj, outname=None):
                       columns={c: str(c) for c in list(annobj.obs.columns)},
                       inplace=True)
 
-    annobj.write(name)
-
+    annobj.write_h5ad(name)
+    
+    
     return name
 
 
@@ -320,17 +325,18 @@ def arrangements(list_of_samples, n=None):
         list of tuples of samples
     """
     if not n:  # assume permutations = arrangements(k,n) where k == n
-        n = len(list_of_samples)
+        n = len(list_of_samples)    
     return [p for p in permutations(list_of_samples, n)]
 
 
-def build_x_y(annobj, cross_list):
+def build_x_y(annobj, cross_list, input_transform=None):
     """Build the two matrices X (train) and Y (labels)
 
     Args:
         annobj (:obj:AnnData):
         cross_list (list((str,str))): pairs of indexes
         obs_names (str): filtering over the features (e.g. genes)
+        input_transform (str): reference to a function
 
     Returns:
         (df_X,def_Y) where X  and Y of size len(cross_list) x len(obs_names)
@@ -347,8 +353,17 @@ def build_x_y(annobj, cross_list):
     # build accessing dictionary
     access = {x:i for i,x in enumerate(annobj.var_names)}
     
+    # apply transformation
+    if input_transform:
+        try:
+            m = function_mappings[input_transform](annobj.X) # call the function
+        except:
+            return "Invalid function - please check the processing.rnaseq_cross_tissue documentation"
+    else:
+        m = annobj.X
+        
     # convert to sparse matrix
-    m = sparse.csr_matrix(np.matrix(annobj.X))
+    m = sparse.csr_matrix(np.matrix(m))
     
     for i, (x, y) in enumerate(cross_list):
         custom_index = str(str(x) + "_" + str(y))
@@ -377,8 +392,8 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
         anndata_obj (:obj:AnnData): h5ad format
         individuals (list(str)): (individuals) in the summarized experiment (assume there is a row called Individuals)
         gene_ids (list(str)): (gene_ids/rows) in the summarized experiment
-        traget_transform (str): reference to a function  function
-        input_transform (str): reference to a function
+        traget_transform (str): reference to a function  function - still not implemented
+        input_transform (str): reference to a function; choose [log]
         shuffle (bool):
 
     Returns:
@@ -398,11 +413,28 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
         cross_list = arrangements(sample_ids, n)
 
     if isinstance(sample_ids, dict):
+        print("compute all arrangements")
         sample_aux = []
         for key in sample_ids:
-            cross_list += arrangements(sample_ids[key], n)
             
-            # flatten var_names dict
+#             # debugging 
+#             c_tissues = len(sample_ids[key])
+            
+#             if c_tissues >= 2:
+#                 c_arrangements = float(math.factorial(c_tissues)/math.factorial(c_tissues - n))
+#             else:
+#                 c_arrangements = 1
+#             pairs += c_arrangements
+#             print("Individual: ",key, " #Tissues: ", c_tissues, " Total arrangements: ", c_arrangements)
+            
+            if len(sample_ids[key]) >= n:
+                cross_list += arrangements(sample_ids[key], n)
+                print(cross_list)
+            elif len(sample_ids[key]) == 0:
+                print(key, " has no tissue!!")
+            else: # for one tissue available
+                cross_list += [(sample_ids[key])]
+            
             sample_aux += sample_ids[key]
 
         samples = list(set(sample_aux))
@@ -410,7 +442,7 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
     anndata_filtered_var = anndata_obj[:, samples]
     anndata_sliced = anndata_filtered_var[gene_ids,:]
     
-    (X, Y) = build_x_y(anndata_sliced, cross_list)
+    (X, Y) = build_x_y(anndata_sliced, cross_list, input_transform=input_transform)
     
     return (X, Y)
 
@@ -474,7 +506,7 @@ def rebalance(train, valid, test, tissues_info, n_samples, fraction=[3. / 5, 1. 
     balanced = False
     i = 1
     iterations = 100
-    epsilon = 0.0001
+    epsilon = 0.001
     
     while(not balanced and i < iterations):
         
@@ -548,6 +580,7 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
     train_individuals = []
     valid_individuals = []
     test_individuals = []
+    
     for name, group in df_grouped:  # get same fraction from each group
         if group.shape[0] > 3:
             index_aux = list(map(lambda x: math.ceil(group.shape[0] * x), fraction))
@@ -572,6 +605,11 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
     rebalance(train_individuals,valid_individuals,test_individuals,info_tissues,annobj.var.shape[0])
 
     return (train_individuals,valid_individuals,test_individuals)
+
+
+
+# variable which stores reference to function
+function_mappings = {'log':mylog}
 
 if __name__ == '__main__':
 
