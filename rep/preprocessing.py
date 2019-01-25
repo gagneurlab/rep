@@ -13,10 +13,14 @@ import argh
 import os
 import sys
 import time
+import json
+
 from itertools import chain
 from itertools import permutations
 from itertools import combinations
 import traceback
+import h5py
+
 
 import numpy
 # import scanpy
@@ -28,10 +32,32 @@ from scipy import sparse
 
 from rep.constants import ANNDATA_CST as a
 
-def mylog(df):
-    """log2(df) using pseudocounts
-    """
-    return df.apply(lambda x: math.log(x+0.001))
+########################################## I/O #########################################################
+########################################################################################################
+
+def readh5(name):
+    filename = name
+    f = h5py.File(filename, 'r')
+    X = np.array(f[list(f.keys())[0]])
+#     f.close()
+    
+    return X
+
+def writeh5(obj,obj_name,filename):
+    h5f = h5py.File(filename, 'w')
+    h5f.create_dataset(obj_name, data=obj)
+    h5f.close()
+    
+
+def readJSON(name):
+    with open(name,'r') as json_file:  
+        data = json.load(json_file)
+    return data
+
+def writeJSON(obj,filename):
+    with open(filename,'w') as f:
+        json.dump(obj, f, sort_keys=True, indent=4)
+
     
 def print_anndata(toprintanndata):
     print("anndata.X ----")
@@ -42,10 +68,83 @@ def print_anndata(toprintanndata):
     print(toprintanndata.obs.iloc[:5,:5])
     print()
 
-
 def load_df(csvfile, header=None, delimiter=",", index_col=0):
     return pd.read_csv(os.path.abspath(csvfile), header=header, delimiter=delimiter, index_col=index_col)
 
+
+########################################## Transform function ##########################################
+########################################################################################################
+
+def mylog(df):
+    """log2(df) using pseudocounts
+    """
+    return df.apply(lambda x: math.log(x+1))
+
+def mylog10(df):
+    """log10(df) using pseudocounts
+    """
+    return np.log10(df+1)
+
+
+
+# variable which stores reference to function
+function_mappings = {'log':mylog, 'log10':mylog10 }
+
+########################################## Anndata Summ Exp.  ##########################################
+########################################################################################################
+
+def create_anndata(counts_file, samples_anno=None, genes_anno=None, sep=","):
+    """Creates an AnnData Object
+
+    Args:
+        counts_file (str): file containing the counts
+        samples_anno (str): file containing sampple annotation
+        genes_anno (str): file containing genes annotation
+        sep:
+
+    Returns:
+        AnnData object
+    """
+    x = load_df(counts_file, header=0, delimiter=sep)
+    annobj = anndata.AnnData(X=x)
+    load_genes(annobj, genes_anno, sep)
+    load_samples(annobj, samples_anno, sep)
+
+    return annobj
+
+
+def load(filename, backed=False, samples_anno=None, genes_anno=None, sep=","):
+    """Load anndata object
+
+    Args:
+        filename (str): .h5ad file containing n_obs x n_vars count matrix and further annotations
+        backed (bool): default False - see anndata.read_h5ad documentation https://media.readthedocs.org/pdf/anndata/latest/anndata.pdf
+                       if varanno and obsanno are provided please set backed = r+
+        samples_anno (str,optional) : sample_tissue description file
+        genes_anno (str,optional): gene id description file
+        sep (str): separator for varanno and obsanno files
+
+    Returns:
+        Anndata object
+    """
+    abspath = os.path.abspath(filename)
+    annobj = anndata.read_h5ad(abspath, backed=backed)
+    try:
+
+        if samples_anno or genes_anno:
+            if backed != 'r+':
+                raise BackedError
+
+    except BackedError:
+        print("Exception [varanno] or [obsanno] provided! Please set [backed='r+']")
+        exit(1)
+
+    # read samples description
+    load_samples(annobj, samples_anno, sep)
+    # read genes description
+    load_genes(annobj, genes_anno, sep)
+
+    return annobj
 
 def load_samples(obj, csvfile, sep=","):
     """Load samples (columns) description for the summarized experiment
@@ -122,59 +221,40 @@ def load_count_matrix(obj, filename, sep=","):
     return annobj
 
 
-def create_anndata(counts_file, samples_anno=None, genes_anno=None, sep=","):
-    """Creates an AnnData Object
+def save(annobj, outname=None):
+    """Write .h5ad-formatted hdf5 file and close a potential backing file. Default gzip file
 
     Args:
-        counts_file (str): file containing the counts
-        samples_anno (str): file containing sampple annotation
-        genes_anno (str): file containing genes annotation
-        sep:
+        annobj (:obj:AnnData):
+        outname (str): name of the output file (needs to end with .h5ad)
 
     Returns:
-        AnnData object
+        output filename (if none specified then this will be random generated)
     """
-    x = load_df(counts_file, header=0, delimiter=sep)
-    annobj = anndata.AnnData(X=x)
-    load_genes(annobj, genes_anno, sep)
-    load_samples(annobj, samples_anno, sep)
 
-    return annobj
+    if outname:
+        abspath = os.path.abspath(outname)
+        name = abspath
+    else:
+        name = os.path.abspath("tmp" + str(int(time.time())) + ".h5ad")
 
+    # convert header to string (avoid bug)
+    annobj.var_names = [str(v) for v in annobj.var_names]
+    annobj.obs_names = [str(o) for o in annobj.obs_names]
+    annobj.var.rename(index={r: str(r) for r in list(annobj.var.index)},
+                      columns={c: str(c) for c in list(annobj.var.columns)},
+                      inplace=True)
+    annobj.obs.rename(index={r: str(r) for r in list(annobj.obs.index)},
+                      columns={c: str(c) for c in list(annobj.obs.columns)},
+                      inplace=True)
 
-def load(filename, backed=False, samples_anno=None, genes_anno=None, sep=","):
-    """Load anndata object
+    annobj.write_h5ad(name)
+    
+    
+    return name
 
-    Args:
-        filename (str): .h5ad file containing n_obs x n_vars count matrix and further annotations
-        backed (bool): default False - see anndata.read_h5ad documentation https://media.readthedocs.org/pdf/anndata/latest/anndata.pdf
-                       if varanno and obsanno are provided please set backed = r+
-        samples_anno (str,optional) : sample_tissue description file
-        genes_anno (str,optional): gene id description file
-        sep (str): separator for varanno and obsanno files
-
-    Returns:
-        Anndata object
-    """
-    abspath = os.path.abspath(filename)
-    annobj = anndata.read_h5ad(abspath, backed=backed)
-    try:
-
-        if samples_anno or genes_anno:
-            if backed != 'r+':
-                raise BackedError
-
-    except BackedError:
-        print("Exception [varanno] or [obsanno] provided! Please set [backed='r+']")
-        exit(1)
-
-    # read samples description
-    load_samples(annobj, samples_anno, sep)
-    # read genes description
-    load_genes(annobj, genes_anno, sep)
-
-    return annobj
-
+########################################## Filter anndata Summ Exp.  ###################################
+########################################################################################################
 
 def filter_df_by_value(df, jsonFilters):
     """Find rows matching the filtering criteria.
@@ -192,15 +272,16 @@ def filter_df_by_value(df, jsonFilters):
             names = list(set(names) & set(jsonFilters[key]))
             continue
 
-        # regular columns
+
         name_per_key = []
+        # regular columns
         for val in jsonFilters[key]:
             # get index of rows which column matches certain value
             aux_names = df.index[df[str(key)] == val].tolist()
-
-            # intersect 2 lists
-            name_per_key = list(set(name_per_key) | set(aux_names))
-
+            name_per_key += aux_names
+            
+        # remove duplicates
+        name_per_key = list(set(name_per_key))
         names = list(set(names) & set(name_per_key))
 
 
@@ -261,38 +342,8 @@ def filter_anndata_by_region(annobj, filterJson, regions, format):
     pass
 
 
-def save(annobj, outname=None):
-    """Write .h5ad-formatted hdf5 file and close a potential backing file. Default gzip file
-
-    Args:
-        annobj (:obj:AnnData):
-        outname (str): name of the output file (needs to end with .h5ad)
-
-    Returns:
-        output filename (if none specified then this will be random generated)
-    """
-
-    if outname:
-        abspath = os.path.abspath(outname)
-        name = abspath
-    else:
-        name = os.path.abspath("tmp" + str(int(time.time())) + ".h5ad")
-
-    # convert header to string (avoid bug)
-    annobj.var_names = [str(v) for v in annobj.var_names]
-    annobj.obs_names = [str(o) for o in annobj.obs_names]
-    annobj.var.rename(index={r: str(r) for r in list(annobj.var.index)},
-                      columns={c: str(c) for c in list(annobj.var.columns)},
-                      inplace=True)
-    annobj.obs.rename(index={r: str(r) for r in list(annobj.obs.index)},
-                      columns={c: str(c) for c in list(annobj.obs.columns)},
-                      inplace=True)
-
-    annobj.write_h5ad(name)
-    
-    
-    return name
-
+########################################## Split and compute pairs   ###################################
+########################################################################################################
 
 def group_by(df, column, index_subset):
     """Group for instance e.g. tissues per sample.
@@ -310,7 +361,7 @@ def group_by(df, column, index_subset):
     for group in df_new.groups:
         # rearrage the index_subset by grouping over e.g. tissue
         dict[group] = list(set(list(df_new.groups[group])) & set(index_subset))
-
+        
     return dict
 
 
@@ -341,17 +392,13 @@ def build_x_y(annobj, cross_list, input_transform=None):
     Returns:
         (df_X,def_Y) where X  and Y of size len(cross_list) x len(obs_names)
     """
-    # create indexes
-    length = len(annobj.obs_names)
+    # create indexes T1_T2
     index_elem = [str(str(x) + "_" + str(y)) for i, (x,y) in enumerate(cross_list)]
-
-    df_X = pd.DataFrame(index=annobj.obs_names, columns=index_elem)
-    df_Y = pd.DataFrame(index=annobj.obs_names, columns=index_elem)
-    
-    print("Total pairs: " + str(len(cross_list)))
     
     # build accessing dictionary
     access = {x:i for i,x in enumerate(annobj.var_names)}
+    
+    print("Total pairs: " + str(len(cross_list)))    
     
     # apply transformation
     if input_transform:
@@ -361,22 +408,15 @@ def build_x_y(annobj, cross_list, input_transform=None):
             return "Invalid function - please check the processing.rnaseq_cross_tissue documentation"
     else:
         m = annobj.X
-        
-    # convert to sparse matrix
-    m = sparse.csr_matrix(np.matrix(m))
-    
-    for i, (x, y) in enumerate(cross_list):
-        custom_index = str(str(x) + "_" + str(y))
-        
-        # add X
-        vector = m[:,access[x]]
-        df_X.loc[:,custom_index] = vector
-        
-        # add Y
-        vector = m[:,access[y]]
-        df_Y.loc[:,custom_index] = vector
 
-    return (df_X.T, df_Y.T)
+    slice_x = [access[x] for (x,_) in cross_list]
+    slice_y = [access[y] for (_,y) in cross_list]
+    
+#     mydata = sparse.csc_matrix(m)
+    mydata = np.array(m)
+    
+    return (mydata[:,slice_x].T, mydata[:,slice_y].T, index_elem, annobj.obs_names)
+
 
 def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=None,
                         input_transform=None, shuffle=False):
@@ -403,9 +443,17 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
 
     # get samples
     samples_df = anndata_obj.var
-    sample_ids = filter_df_by_value(samples_df, {'Individual': individuals})
-    sample_ids = group_by(samples_df, 'Individual', sample_ids)
-
+    print("samples_df ", samples_df.shape)
+    
+    # slice data.frame only for the subset of individuals
+    _ids = filter_df_by_value(samples_df, {'Individual': individuals})
+    
+    samples_df_sliced = samples_df[samples_df.index.isin(_ids)]
+    print("samples_df_sliced ", samples_df_sliced.shape)
+    
+    # group samples per individual
+    sample_ids = group_by(samples_df_sliced, 'Individual', _ids)
+    
     n = 2  # pairs of tissues
     cross_list = []
     samples = []
@@ -416,24 +464,8 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
         print("compute all arrangements")
         sample_aux = []
         for key in sample_ids:
-            
-#             # debugging 
-#             c_tissues = len(sample_ids[key])
-            
-#             if c_tissues >= 2:
-#                 c_arrangements = float(math.factorial(c_tissues)/math.factorial(c_tissues - n))
-#             else:
-#                 c_arrangements = 1
-#             pairs += c_arrangements
-#             print("Individual: ",key, " #Tissues: ", c_tissues, " Total arrangements: ", c_arrangements)
-            
             if len(sample_ids[key]) >= n:
                 cross_list += arrangements(sample_ids[key], n)
-                print(cross_list)
-            elif len(sample_ids[key]) == 0:
-                print(key, " has no tissue!!")
-            else: # for one tissue available
-                cross_list += [(sample_ids[key])]
             
             sample_aux += sample_ids[key]
 
@@ -442,13 +474,14 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
     anndata_filtered_var = anndata_obj[:, samples]
     anndata_sliced = anndata_filtered_var[gene_ids,:]
     
-    (X, Y) = build_x_y(anndata_sliced, cross_list, input_transform=input_transform)
+    (X, Y, rownames, columns) = build_x_y(anndata_sliced, cross_list, input_transform=input_transform)
     
-    return (X, Y)
+    return (X, Y, rownames, columns)
 
 
 def sum_tissues_per_individual(info, individuals):
     return sum(info[x] for x  in info if x in individuals)
+
 
 def remove_best(real,expected,subset,tissue_info,epsilon,n_samples):
     
@@ -506,7 +539,7 @@ def rebalance(train, valid, test, tissues_info, n_samples, fraction=[3. / 5, 1. 
     balanced = False
     i = 1
     iterations = 100
-    epsilon = 0.001
+    epsilon = 0.005
     
     while(not balanced and i < iterations):
         
@@ -573,7 +606,7 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
     """
 
     # Stratify
-    df = annobj.var.reset_index()[['Individual'] + groupby]
+    df = annobj.var.reset_index(drop=True)[['Individual'] + groupby]
     df.drop_duplicates(inplace = True)
     df_grouped = df.groupby(groupby, as_index=False)
     
@@ -583,7 +616,9 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
     
     for name, group in df_grouped:  # get same fraction from each group
         if group.shape[0] > 3:
-            index_aux = list(map(lambda x: math.ceil(group.shape[0] * x), fraction))
+            index_aux = list(map(lambda x: math.floor(group.shape[0] * x), fraction))
+            # correct error
+            index_aux[2] = group.shape[0] - index_aux[0] - index_aux[1]
         elif group.shape[0] == 3:
             index_aux = [1,1,1]
         elif group.shape[0] == 2:
@@ -594,7 +629,7 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
         train_individuals += group.iloc[:index_aux[0],:]['Individual'].tolist()
         valid_individuals += group.iloc[index_aux[0]: (index_aux[0] + index_aux[1]),:]['Individual'].tolist()
         test_individuals += group.iloc[(index_aux[0] + index_aux[1]):,:]['Individual'].tolist()
-        
+       
         
     # count tissues per individual
     info_tissues = {indiv: annobj.var[annobj.var['Individual'] == indiv].shape[0] for indiv in df['Individual'].tolist()}
@@ -606,10 +641,6 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
 
     return (train_individuals,valid_individuals,test_individuals)
 
-
-
-# variable which stores reference to function
-function_mappings = {'log':mylog}
 
 if __name__ == '__main__':
 
