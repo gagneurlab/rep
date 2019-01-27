@@ -377,10 +377,11 @@ def arrangements(list_of_samples, n=None):
     """
     if not n:  # assume permutations = arrangements(k,n) where k == n
         n = len(list_of_samples)    
+    
     return [p for p in permutations(list_of_samples, n)]
 
 
-def build_x_y(annobj, cross_list, input_transform=None):
+def build_x_y(annobj, cross_list, input_transform=None, onlyBlood = False):
     """Build the two matrices X (train) and Y (labels)
 
     Args:
@@ -392,9 +393,18 @@ def build_x_y(annobj, cross_list, input_transform=None):
     Returns:
         (df_X,def_Y) where X  and Y of size len(cross_list) x len(obs_names)
     """
+    
+    # cross_list - filter only blood
+    filtered_list = []
+    if onlyBlood == True:
+        for (x,y) in cross_list:
+            if annobj.var.loc[annobj.var.index == x,'Tissue'].tolist()[0] == 'Whole Blood':
+                filtered_list.append((x,y))    
+    
+    cross_list = filtered_list
     # create indexes T1_T2
     index_elem = [str(str(x) + "_" + str(y)) for i, (x,y) in enumerate(cross_list)]
-    
+        
     # build accessing dictionary
     access = {x:i for i,x in enumerate(annobj.var_names)}
     
@@ -419,7 +429,7 @@ def build_x_y(annobj, cross_list, input_transform=None):
 
 
 def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=None,
-                        input_transform=None, shuffle=False):
+                        input_transform=None, shuffle=False, onlyBlood=False):
     """Prepare the traning data by:
         1. Filtering the anndata matrix, by col (gene_ids) and rows (sample_ids)
         2. Normalize data if necessary
@@ -474,7 +484,7 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
     anndata_filtered_var = anndata_obj[:, samples]
     anndata_sliced = anndata_filtered_var[gene_ids,:]
     
-    (X, Y, rownames, columns) = build_x_y(anndata_sliced, cross_list, input_transform=input_transform)
+    (X, Y, rownames, columns) = build_x_y(anndata_sliced, cross_list, input_transform=input_transform, onlyBlood = onlyBlood)
     
     return (X, Y, rownames, columns)
 
