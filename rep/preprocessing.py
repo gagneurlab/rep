@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import json
+import re
 
 from itertools import chain
 from itertools import permutations
@@ -75,7 +76,9 @@ def load_df(csvfile, header=None, delimiter=",", index_col=0):
 ########################################################################################################
 
 def get_annotation(file):
-
+    
+    dict_genes = {}
+    
     with open(file,"r") as f:
         for line in f:
             if line.startswith("#"):
@@ -150,6 +153,7 @@ def get_annotation(file):
         
     return dict_genes
 
+
 def raw_counts2fpkm(annobj,annotation):
     """Convert raw counts to fpkm
     
@@ -160,12 +164,13 @@ def raw_counts2fpkm(annobj,annotation):
     
     norm_X = np.zeros(annobj.X.shape)
     recount_genes = annobj.obs.index.tolist()
-    mapped_fragments = sum(annobj.X)
+    mapped_fragments =  np.sum(annobj.X, axis = 0)
 
     for i in range(0,annobj.X.shape[0]):
         row = annobj.X[i,:]
         gene = recount_genes[i]
         gene_len = annotation[gene]["len_exonic"]
+        
         norm_X[i,:] = (row * 1000000) / (gene_len * mapped_fragments)
 
     return norm_X
