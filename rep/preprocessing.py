@@ -504,8 +504,8 @@ def build_x_y(annobj, cross_list, input_transform=None, onlyBlood = False):
         for (x,y) in cross_list:
             if annobj.var.loc[annobj.var.index == x,'Tissue'].tolist()[0] == 'Whole Blood':
                 filtered_list.append((x,y))    
-    
-    cross_list = filtered_list
+        cross_list = filtered_list
+        
     # create indexes T1_T2
     index_elem = [str(str(x) + "_" + str(y)) for i, (x,y) in enumerate(cross_list)]
         
