@@ -127,6 +127,11 @@ dependencies:
     - gffutils==0.9
     - gin-config==0.1.2
     - gin-train==0.1.9
+    - gitdb2==2.0.5
+    - gitpython==2.1.11
+    - google-pasta==0.1.1
+    - gql==0.1.0
+    - graphql-core==2.1
     - grpcio==1.18.0
     - idna==2.8
     - ipython-autotime==0.1
@@ -140,6 +145,7 @@ dependencies:
     - jupyter-nbextensions-configurator==0.4.1
     - jupyterlab==0.35.4
     - jupyterlab-server==0.2.0
+    - keras==2.2.4
     - keras-applications==1.0.6
     - keras-preprocessing==1.0.5
     - kipoi==0.6.5
@@ -159,9 +165,11 @@ dependencies:
     - numexpr==2.6.8
     - nvidia-ml-py3==7.352.0
     - papermill==0.16.2
+    - pathtools==0.1.2
     - patsy==0.5.1
     - plotly==3.5.0
     - poyo==0.4.2
+    - promise==2.2.1
     - protobuf==3.6.1
     - psutil==5.5.0
     - pyarrow==0.11.1
@@ -178,22 +186,31 @@ dependencies:
     - related==0.7.2
     - requests==2.21.0
     - retrying==1.3.3
+    - rx==1.6.1
     - s3transfer==0.1.13
     - scanpy==1.3.7
     - scikit-learn==0.20.0
     - seaborn==0.9.0
+    - sentry-sdk==0.7.2
+    - shortuuid==0.5.0
     - simplejson==3.16.0
+    - smmap2==2.0.5
     - statsmodels==0.9.0
+    - subprocess32==3.5.3
     - tables==3.4.4
+    - tb-nightly==1.13.0a20190204
     - tensorboard==1.12.2
     - tensorflow==1.12.0
     - termcolor==1.1.0
     - textwrap3==0.9.1
+    - tf-estimator-nightly==1.14.0.dev2019020414
     - tinydb==3.12.2
     - toolz==0.9.0
     - tqdm==4.28.1
     - urllib3==1.22
     - vdom==0.6
+    - wandb==0.6.35
+    - watchdog==0.9.0
     - websocket-client==0.54.0
     - werkzeug==0.14.1
     - whichcraft==0.5.2
