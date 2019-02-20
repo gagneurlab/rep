@@ -14,6 +14,7 @@ import os
 import sys
 import time
 import json
+import re
 
 from itertools import chain
 from itertools import permutations
@@ -70,6 +71,109 @@ def print_anndata(toprintanndata):
 
 def load_df(csvfile, header=None, delimiter=",", index_col=0):
     return pd.read_csv(os.path.abspath(csvfile), header=header, delimiter=delimiter, index_col=index_col)
+
+########################################## Genomic annotation ##########################################
+########################################################################################################
+
+def get_annotation(file):
+    
+    dict_genes = {}
+    
+    with open(file,"r") as f:
+        for line in f:
+            if line.startswith("#"):
+                continue
+            arr = line.replace("\n","").split("\t")
+            gene_id = re.search("gene_id \"(.*?)\";", arr[8]).group(1)
+
+            entry = {}
+            entry["start"] = int(arr[3])
+            entry["stop"] = int(arr[4])
+            entry["chr"] = arr[0]
+            entry["strand"] = arr[6]
+            entry["len"] = abs(entry["stop"] - entry["start"])
+
+            if arr[2] == 'gene':
+
+                if gene_id not in dict_genes:
+                    entry["transcript_list"] = {}
+                else:
+                    entry["transcript_list"] = dict_genes[gene_id]["transcript_list"]
+                dict_genes[gene_id] = entry
+
+            if arr[2] == 'transcript':
+
+                transcript_id = re.search("transcript_id \"(.*?)\";", arr[8]).group(1)
+
+                if gene_id not in dict_genes: # add gene as parent for the transcript
+                    dict_genes[gene_id] = {}
+                    dict_genes[gene_id]["transcript_list"] = {}
+
+
+                # add transcript
+                if transcript_id in dict_genes[gene_id]["transcript_list"]:
+                    entry["exons_list"] = dict_genes[gene_id]["transcript_list"][transcript_id]["exon_list"]
+                else:
+                    entry["exons_list"] = []
+                dict_genes[gene_id]["transcript_list"][transcript_id]  = entry
+
+            if arr[2] == 'exon':
+
+                transcript_id = re.search("transcript_id \"(.*?)\";", arr[8]).group(1)
+
+                if gene_id not in dict_genes:
+                    dict_genes[gene_id] = {}
+                    dict_genes[gene_id]["transcript_list"] = {}
+
+                if transcript_id not in dict_genes[gene_id]["transcript_list"]:
+                    dict_genes[gene_id]["transcript_list"][transcript_id] = {}
+
+                if "exon_list" not in dict_genes[gene_id]["transcript_list"][transcript_id]:
+                    dict_genes[gene_id]["transcript_list"][transcript_id]["exon_list"] = []
+
+                dict_genes[gene_id]["transcript_list"][transcript_id]["exon_list"].append((entry["start"],entry["stop"]))
+
+    # find transcript with most exons:
+    for gene in dict_genes:
+        max_exons = 0
+        tr_tokeep = None
+        for tr in dict_genes[gene]["transcript_list"]:
+            if len(dict_genes[gene]["transcript_list"][tr]["exon_list"]) > max_exons:
+                tr_tokeep = tr
+                max_exons = len(dict_genes[gene]["transcript_list"][tr]["exon_list"])
+
+        # remove all other transcripts
+        aux = dict_genes[gene]["transcript_list"][tr_tokeep]
+        dict_genes[gene]["transcript_list"] = {}
+        dict_genes[gene]["transcript_list"][tr_tokeep] = aux
+        
+        # compute exonic length
+        dict_genes[gene]["len_exonic"] = sum([y-x for (x,y) in dict_genes[gene]["transcript_list"][tr_tokeep]["exon_list"]])
+       
+        
+    return dict_genes
+
+
+def raw_counts2fpkm(annobj,annotation):
+    """Convert raw counts to fpkm
+    
+    Args:
+        annobj (:obj:Anndata): 
+        annotation (:obj:json): contains the gene annotation, gene lenght, exonic length
+    """
+    
+    norm_X = np.zeros(annobj.X.shape)
+    recount_genes = annobj.obs.index.tolist()
+    mapped_fragments =  np.sum(annobj.X, axis = 0)
+
+    for i in range(0,annobj.X.shape[0]):
+        row = annobj.X[i,:]
+        gene = recount_genes[i]
+        gene_len = annotation[gene]["len_exonic"]
+        
+        norm_X[i,:] = (row * 1000000) / (gene_len * mapped_fragments)
+
+    return norm_X
 
 
 ########################################## Transform function ##########################################
@@ -400,8 +504,8 @@ def build_x_y(annobj, cross_list, input_transform=None, onlyBlood = False):
         for (x,y) in cross_list:
             if annobj.var.loc[annobj.var.index == x,'Tissue'].tolist()[0] == 'Whole Blood':
                 filtered_list.append((x,y))    
-    
-    cross_list = filtered_list
+        cross_list = filtered_list
+        
     # create indexes T1_T2
     index_elem = [str(str(x) + "_" + str(y)) for i, (x,y) in enumerate(cross_list)]
         
