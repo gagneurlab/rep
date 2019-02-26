@@ -7,22 +7,14 @@ channels:
 dependencies:
   - biopython=1.72=py36h04863e7_0
   - blas=1.0=mkl
-  - ca-certificates=2018.12.5=0
-  - certifi=2018.11.29=py36_0
   - h5py=2.8.0=py36h989c5e5_3
   - hdf5=1.10.2=hba1933b_1
   - intel-openmp=2019.1=144
   - libgcc-ng=8.2.0=hdf63c60_1
   - libgfortran-ng=7.3.0=hdf63c60_0
   - libstdcxx-ng=8.2.0=hdf63c60_1
-  - mkl=2019.1=144
   - mkl_fft=1.0.6=py36h7dd41cf_0
   - mkl_random=1.0.1=py36h4414c95_1
-  - numpy=1.15.4=py36h1d66e8a_0
-  - numpy-base=1.15.4=py36h81de0dd_0
-  - openssl=1.1.1=h7b6447c_0
-  - python=3.6.7=h0371630_0
-  - scipy=1.1.0=py36hfa4b5c9_1
   - bleach=1.4.2=py36_0
   - pyvcf=0.6.8=py36_0
   - attrs=18.2.0=py_0
@@ -83,6 +75,14 @@ dependencies:
   - xz=5.2.4=h470a237_1
   - zeromq=4.2.5=hfc679d8_6
   - zlib=1.2.11=h470a237_3
+  - ca-certificates=2019.1.23=0
+  - certifi=2018.11.29=py36_0
+  - mkl=2018.0.3=1
+  - numpy=1.15.0=py36h1b885b7_0
+  - numpy-base=1.15.0=py36h3dfced4_0
+  - openssl=1.1.1a=h7b6447c_0
+  - python=3.6.8=h0371630_0
+  - scipy=1.1.0=py36hd20e5f9_0
   - pip:
     - absl-py==0.7.0
     - adal==1.2.0
