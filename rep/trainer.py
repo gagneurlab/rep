@@ -17,12 +17,23 @@ import gin
 import sklearn
 import joblib
 
-
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
 
 class Trainer(object):
-
+    """Generic trainer object. This class has twio major components:
+            (i) train model
+            (ii) evalute model (this implies also predicting using the model)
+    
+        
+    Attributes:
+        model: compiled sklearn.pipeline.Pipeline
+        train: training Dataset (object inheriting from kipoi.data.Dataset)
+        valid: validation Dataset (object inheriting from kipoi.data.Dataset)
+        output_dir: output directory where to log the training
+        cometml_experiment: if not None, append logs to commetml
+        wandb_run:
+    """
     def __init__(self,
                  model,
                  train_dataset,
@@ -30,15 +41,7 @@ class Trainer(object):
                  output_dir,
                  cometml_experiment=None,
                  wandb_run=None):
-        """
-        Args:
-            model: compiled sklearn.pipeline.Pipeline
-            train: training Dataset (object inheriting from kipoi.data.Dataset)
-            valid: validation Dataset (object inheriting from kipoi.data.Dataset)
-            output_dir: output directory where to log the training
-            cometml_experiment: if not None, append logs to commetml
-            wandb_run:
-        """
+        
         self.model = model
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
@@ -66,6 +69,66 @@ class Trainer(object):
     
     
     ##########################################################################
+    ###########################    Train   ###################################
+    ##########################################################################
+    
+    def train(self,
+              batch_size=256,
+              epochs=100,
+              early_stop_patience=4,
+              num_workers=8,
+              train_epoch_frac=1.0,
+              valid_epoch_frac=1.0,
+              train_samples_per_epoch=None,
+              validation_samples=None,
+              train_batch_sampler=None,
+              **kwargs):
+
+        # **kwargs won't be used, they are just included for compatibility with gin_train.
+        """Train the model
+        
+        Args:
+            num_workers: how many workers to use in parallel
+        """
+        
+        # define dataset
+        X_train, y_train = (self.train_dataset[0], self.train_dataset[1])
+        if self.valid_dataset is None:
+            raise ValueError("len(self.valid_dataset) == 0")
+
+        # check model type
+        self.check_model()
+
+        # fit model
+        self.fit(X_train, y_train, epochs=epochs, batch_size=batch_size, num_workers=num_workers)
+        
+        # save model
+        self.save()
+        
+    
+    @abstractmethod
+    def check_model(self):
+        """Check if the model has the specified data type."""
+        pass
+    
+    
+    @abstractmethod
+    def fit(self, inputs, targets):
+        """Generic method for fitting using a given model.
+           This method has to be implemented in subclass
+        """
+        pass
+    
+    
+    @abstractmethod
+    def save(self):
+        """Generic method for saving the model.
+           This method has to be implemented in subclass.
+        """
+        pass
+    
+    
+    ##########################################################################
     ########################### Evaluation ###################################
     ##########################################################################
     
@@ -75,6 +138,7 @@ class Trainer(object):
                  batch_size = None,
                  num_workers = 8,
                  eval_train=False,
+                 eval_skip=False,
                  save=True):
         """Evaluate the model on the validation set
 
@@ -100,7 +164,8 @@ class Trainer(object):
             lpreds = []
             llabels = []
 
-            lpreds.append(self.model.predict(inputs))
+            
+            lpreds.append(self.predict(inputs))
             llabels.append(deepcopy(targets))
 
             preds = numpy_collate_concat(lpreds)
@@ -125,6 +190,14 @@ class Trainer(object):
 
         return metric_res
     
+    
+    @abstractmethod
+    def predict(self, inputs):
+        """Generic method for predicting using a given model.
+           This method has to be implemented in subclass.
+        """
+        pass
+
 
 @gin.configurable
 class SklearnPipelineTrainer(Trainer):
@@ -141,38 +214,114 @@ class SklearnPipelineTrainer(Trainer):
                  wandb_run=None):
         super(SklearnPipelineTrainer,self).__init__(model, train_dataset, valid_dataset, output_dir, cometml_experiment, wandb_run)
 
-        
-    def train(self,
-              num_workers=8,
-              **kwargs):
-
-        # **kwargs won't be used, they are just included for compatibility with gin_train.
-        """Train the model
-        Args:
-            num_workers: how many workers to use in parallel
-        """
-
-        X_train, y_train = (self.train_dataset[0], self.train_dataset[1])
-
-        if self.valid_dataset is None:
-            raise ValueError("len(self.valid_dataset) == 0")
-
+    
+    def check_model(self):
         if not isinstance(self.model, sklearn.pipeline.Pipeline):
             raise ValueError("model is not a sklearn.pipeline.Pipeline")
-
-        # fit model
-        self.model.fit(X_train, y_train)
-        
-        # save model
-        self.save()
-#         self.model.save(self.ckp_file)
     
-    def save(self):
-        
+    
+    def fit(self, inputs, targets, epochs=10, batch_size=256, num_workers=8):        
+        self.model.fit(inputs, targets)
+    
+    
+    def save(self):        
         import pickle
         with open(self.ckp_file, 'wb') as file:
             pickle.dump(self.model, file)
 
-#         import joblib
-#         joblib.dump(self.model, self.ckp_file, compress = 1)
+
+    def predict(self, inputs):
+        return self.model.predict(inputs)
+    
+
+@gin.configurable
+class PyTorchTrainer(Trainer):
+
+    """Simple PyTorch model trainer
+    
+    Attributes:
+            model: object of class LinearRegressionCustom extending nn.Module
+            train_dataset:
+            valid_dataset:
+            output_dir:
+            cometml_experiment:
+            wandb_run:
+    """
+
+    def __init__(self,
+                 model,
+                 train_dataset,
+                 valid_dataset,
+                 output_dir,
+                 cometml_experiment=None,
+                 wandb_run=None):
+        """
+        
+        Args:
+            model: object of class LinearRegressionCustom extending nn.Module
+            train_dataset:
+            valid_dataset:
+            output_dir:
+            cometml_experiment:
+            wandb_run:
+        """
+        
+        super(PyTorchTrainer,self).__init__(model, train_dataset, valid_dataset, output_dir, cometml_experiment, wandb_run)
+        
+        # initilize the output data
+        self.loss = None
+        self.outputs = None
+        
+   
+    def check_model(self):
+        if not isinstance(self.model, torch.nn.Module):
+            raise ValueError("model is not a torch.nn.Module")
+    
+    
+    def fit(self, inputs, targets, epochs=10, batch_size=256, num_workers=8):  
+        
+        for epoch in range(epochs):
+            epoch +=1
+            
+            # define dataset
+            trainset = TensorDataset(inputs, targets)
+            
+            # reset gradients
+            self.model.get_optimiser.zero_grad()
+            
+            # use mini-batches to train the model
+            trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+            
+            for i, data in enumerate(trainloader, 0):
+                inputs, labels = data    
+                inputs, labels = Variable(inputs), Variable(labels)
+                self.fit_minibatch(intputs, labels)
+                
+            print('epoch {}, loss {}'.format(epoch,self.loss.data[0]))
+    
+    
+    def fit_minibatch(inputs, labels):
+        
+        # forward to get predicted values
+        self.outputs = self.model.forward(inputs)
+        
+        # compute loss
+        self.loss = self.model.get_criterion(self.outputs, labels)
+        
+        # back propagation - compute gradients
+        self.loss.backward()
+        
+        # update the parameters
+        self.model.get_optimiser.step()
+    
+    
+    def predict(self, inputs):
+        return self.model.get_model(inputs)
+    
+    
+    def save(self):
+        torch.save(self.model.get_model, self.ckp_file)
+        
+    
+
 
