@@ -14,10 +14,21 @@ lasso_model.n_components = 10
 lasso_model.cv = 5
 lasso_model.max_iter = 20
 lasso_model.normalize = False
-lasso_model.n_jobs = 5
+lasso_model.n_jobs = 1
 
-# lasso_model.dim_reducer = @sk.decomposition.PCA()
+# lasso_model.dim_reducer = @PCA()
+# PCA.n_components = 10
+# PCA.whiten=True
+
+#lasso_model.lasso_lars = @LassoLarsCV()
+#LassoLarsCV.cv = 5
+#LassoLarsCV.max_iter = 20
+#LassoLarsCV.normalize = False
+#LassoLarsCV.n_jobs = 5
+
+# lasso_model.dim_reducer = @sk.decomposition.PCA
 # sk.decomposition.PCA.n_components = 10
+
 # lasso_model.lasso_lars = @sk.linear_model.LassoLarsCV()
 # sk.linear_model.LassoLarsCV.cv = 5
 # sk.linear_model.LassoLarsCV.max_iter = 20
@@ -42,15 +53,15 @@ lasso_model.n_jobs = 5
 # --------------------------------------------
 # data
 train.data = @rep_blood_expression()  # use the default train and valid chromosomes
-#rep_blood_expression.x_train_h5 = "/s/project/rep/processed/gtex/input_data/X_valid_pc_bloodonly.h5"
-#rep_blood_expression.y_train_h5 = "/s/project/rep/processed/gtex/input_data/Y_valid_pc_bloodonly.h5"
-#rep_blood_expression.x_valid_h5 = "/s/project/rep/processed/gtex/input_data/X_test_pc_bloodonly.h5"
-#rep_blood_expression.y_valid_h5 = "/s/project/rep/processed/gtex/input_data/Y_test_pc_bloodonly.h5"
+rep_blood_expression.x_train_h5 = "/s/project/rep/processed/gtex/input_data/X_train_pc_bloodonly.h5"
+rep_blood_expression.y_train_h5 = "/s/project/rep/processed/gtex/input_data/Y_train_pc_bloodonly.h5"
+rep_blood_expression.x_valid_h5 = "/s/project/rep/processed/gtex/input_data/X_valid_pc_bloodonly.h5"
+rep_blood_expression.y_valid_h5 = "/s/project/rep/processed/gtex/input_data/Y_valid_pc_bloodonly.h5"
 
-rep_blood_expression.x_train_h5 = "/s/project/rep/processed/gtex/input_data/xtrain_mock.h5"
-rep_blood_expression.y_train_h5 = "/s/project/rep/processed/gtex/input_data/ytrain_mock.h5"
-rep_blood_expression.x_valid_h5 = "/s/project/rep/processed/gtex/input_data/xvalid_mock.h5"
-rep_blood_expression.y_valid_h5 = "/s/project/rep/processed/gtex/input_data/yvalid_mock.h5"
+#rep_blood_expression.x_train_h5 = "/s/project/rep/processed/gtex/input_data/xtrain_mock.h5"
+#rep_blood_expression.y_train_h5 = "/s/project/rep/processed/gtex/input_data/ytrain_mock.h5"
+#rep_blood_expression.x_valid_h5 = "/s/project/rep/processed/gtex/input_data/xvalid_mock.h5"
+#rep_blood_expression.y_valid_h5 = "/s/project/rep/processed/gtex/input_data/yvalid_mock.h5"
 
 # --------------------------------------------
 # evaluation
