@@ -57,6 +57,9 @@ rep_blood_expression.x_train_h5 = "/s/project/rep/processed/gtex/input_data/X_tr
 rep_blood_expression.y_train_h5 = "/s/project/rep/processed/gtex/input_data/Y_train_pc_bloodonly.h5"
 rep_blood_expression.x_valid_h5 = "/s/project/rep/processed/gtex/input_data/X_valid_pc_bloodonly.h5"
 rep_blood_expression.y_valid_h5 = "/s/project/rep/processed/gtex/input_data/Y_valid_pc_bloodonly.h5"
+rep_blood_expression.label = "pc_blood"
+rep_blood_expression.metadata_train_file = "/s/project/rep/processed/gtex/input_data/XY_metadata_train_pc_bloodonly.json"
+rep_blood_expression.metadata_valid_file = "/s/project/rep/processed/gtex/input_data/XY_metadata_valid_pc_bloodonly.json"
 
 #rep_blood_expression.x_train_h5 = "/s/project/rep/processed/gtex/input_data/xtrain_mock.h5"
 #rep_blood_expression.y_train_h5 = "/s/project/rep/processed/gtex/input_data/ytrain_mock.h5"

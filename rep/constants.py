@@ -14,3 +14,7 @@ class GTEX_CST:
     PARENT_TISSUE = 'Parent_Tissue'
     GENDER = 'Gender'
     
+class METADATA_CST:
+    GENE_METADATA = 'gene_metadata'
+    INDIV_TISSUE_METADATA = 'patient_tissue_metadata'
+    

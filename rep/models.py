@@ -37,55 +37,9 @@ def lasso_model(n_components, cv, max_iter, normalize, n_jobs):
                     ('LassoLarsMultiOutputRegressor',MultiOutputRegressor(LassoLarsCV(cv = cv, max_iter = max_iter, normalize = normalize, n_jobs = n_jobs), n_jobs = 1))])
     return p
 
-# dim_reduction = PCA(10)
-# lasso_lars = MultiOutputRegressor(LassoLarsCV(cv=5, max_iter=20, normalize=False, n_jobs = 5))
-
-# @gin.configurable
-# def lasso_model(dim_reducer, lasso_lars):
-#     p = Pipeline([('StandardScaler',StandardScaler(copy=True, with_mean=True, with_std=True)),
-#                     ('DimensionalityReductionPCA',dim_reducer),
-#                     ('LassoLarsMultiOutputRegressor',MultiOutputRegressor(lasso_lars))])
-#     return p
-
-# @gin.configurable
-# def lasso_model(dim_reducer, cv, max_iter, normalize, n_jobs):
-#     """Linear Regression Pipeline using:
-#         (i) StandardScaler as preprocessing step
-#         (ii) Dimensionality reduction using PCA - and its variation i.e. KernelPCA / IncrementalPCA
-#         (iii) Multioutput Regression using LassoLars
-#     """
-#     p = Pipeline([('StandardScaler',StandardScaler(copy=True, with_mean=True, with_std=True)),
-#                     ('DimensionalityReductionPCA',dim_reducer),
-#                     ('LassoLarsMultiOutputRegressor',MultiOutputRegressor(LassoLarsCV(cv = cv, max_iter = max_iter, normalize = normalize, n_jobs = n_jobs), n_jobs = 1))])
-#     return p
-
-# @gin.configurable
-# def lasso_model(dim_reducer, lasso_lars):
-#     """Linear Regression Pipeline using:
-#         (i) StandardScaler as preprocessing step
-#         (ii) Dimensionality reduction using PCA - and its variation i.e. KernelPCA / IncrementalPCA
-#         (iii) Multioutput Regression using LassoLars
-#     """
-#     p = Pipeline([('StandardScaler',StandardScaler(copy=True, with_mean=True, with_std=True)),
-#                     ('DimensionalityReductionPCA',dim_reducer),
-#                     ('LassoLarsMultiOutputRegressor',MultiOutputRegressor(lasso_lars))])
-#     return p
-
-# @gin.configurable
-# def lasso_model(dim_reducer, lasso_lars):
-#     """Linear Regression Pipeline using:
-#         (i) StandardScaler as preprocessing step
-#         (ii) Dimensionality reduction using PCA - and its variation i.e. KernelPCA / IncrementalPCA
-#         (iii) Multioutput Regression using LassoLars
-#     """
-#     p = make_pipeline([('StandardScaler',StandardScaler(copy=True, with_mean=True, with_std=True)),
-#                     ('DimensionalityReductionPCA',dim_reducer),
-#                     ('LassoLarsMultiOutputRegressor',MultiOutputRegressor(lasso_lars, n_jobs=10))])
-#     return p
-
-
 
 ####################### Linear Regression / PyTorch ######################
+
 @gin.configurable
 class LinearRegressionCustom(nn.Module):
     """

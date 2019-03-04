@@ -16,6 +16,7 @@ import gin
 import sklearn
 import joblib
 import pandas as pd
+from abc import ABCMeta, abstractmethod
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -28,12 +29,11 @@ class Trainer(object):
         
     Attributes:
         model: compiled sklearn.pipeline.Pipeline
-        train: training Dataset (object inheriting from kipoi.data.Dataset)
-        valid: validation Dataset (object inheriting from kipoi.data.Dataset)
+        train (:obj:RepDataset): training dataset
+        valid (:obj:RepDataset): validation dataset 
         output_dir: output directory where to log the training
         cometml_experiment: if not None, append logs to commetml
         wandb_run: send evaluation scores to the dashbord
-        metadata: use to compute tissue specific metrics
     """
     def __init__(self,
                  model,
@@ -41,15 +41,13 @@ class Trainer(object):
                  valid_dataset,
                  output_dir,
                  cometml_experiment=None,
-                 wandb_run=None,
-                 metadata_file=None):
+                 wandb_run=None):
         
         self.model = model
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
         self.cometml_experiment = cometml_experiment
         self.wandb_run = wandb_run
-        self.metadata = self.read_decompress(metadata_file)
 
         # setup the output directory
         self.set_output_dir(output_dir)
@@ -116,7 +114,7 @@ class Trainer(object):
         """
         
         # define dataset
-        X_train, y_train = (self.train_dataset[0], self.train_dataset[1])
+        X_train, y_train = (self.train_dataset.inputs, self.train_dataset.targets)
         if self.valid_dataset is None:
             raise ValueError("len(self.valid_dataset) == 0")
 
@@ -176,18 +174,20 @@ class Trainer(object):
         
         # contruct a list of dataset to evaluate
         if eval_train:
-            eval_datasets = [self.train_dataset + self.valid_dataset]
+            eval_datasets = [self.train_dataset, self.valid_dataset]
         else:
             eval_datasets = [self.valid_dataset]
         
         metric_res = OrderedDict()
         eval_metric = metric
         
-        for i, (dataset_name, inputs, targets) in enumerate(eval_datasets):
+        for i, data in enumerate(eval_datasets):
 
             lpreds = []
             llabels = []
-
+            
+            inputs = data.inputs
+            targets = data.targets
             
             lpreds.append(self.predict(inputs))
             llabels.append(deepcopy(targets))
@@ -197,7 +197,7 @@ class Trainer(object):
             del lpreds
             del llabels
             
-            metric_res[dataset_name] = eval_metric(labels, preds)
+            metric_res[data.dataset_name] = eval_metric(labels, preds, tissue_specific_metadata = data.metadata)
                 
         if save:
             write_json(metric_res, self.evaluation_path, indent=2)
@@ -233,7 +233,12 @@ class SklearnPipelineTrainer(Trainer):
                  output_dir,
                  cometml_experiment=None,
                  wandb_run=None):
-        super(SklearnPipelineTrainer,self).__init__(model, train_dataset, valid_dataset, output_dir, cometml_experiment, wandb_run)
+        super(SklearnPipelineTrainer,self).__init__(model,
+                 train_dataset,
+                 valid_dataset,
+                 output_dir,
+                 cometml_experiment,
+                 wandb_run)
 
     
     def check_model(self):
@@ -287,7 +292,12 @@ class PyTorchTrainer(Trainer):
             wandb_run:
         """
         
-        super(PyTorchTrainer,self).__init__(model, train_dataset, valid_dataset, output_dir, cometml_experiment, wandb_run)
+        super(PyTorchTrainer,self).__init__(model,
+                 train_dataset,
+                 valid_dataset,
+                 output_dir,
+                 cometml_experiment,
+                 wandb_run)
         
         # initilize the output data
         self.loss = None

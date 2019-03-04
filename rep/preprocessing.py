@@ -33,6 +33,7 @@ from scipy import sparse
 
 from rep.constants import ANNDATA_CST as a
 from rep.constants import GTEX_CST as gcst
+from rep.constants import METADATA_CST as mcst
 
 ########################################## I/O #########################################################
 ########################################################################################################
@@ -527,8 +528,8 @@ def get_metadata(annobj, cross_list, index_pat_tissue):
     # Gene information
     gene_info = pd.DataFrame(index=annobj.obs_names)
     
-    return {'gene_metadata':gene_info,
-           'patient_tissue_metadata':patient_tissue_info}
+    return {mcst.GENE_METADATA:gene_info.to_json(),
+            mcst.INDIV_TISSUE_METADATA:patient_tissue_info.to_json()}
     
         
 
