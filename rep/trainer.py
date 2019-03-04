@@ -152,14 +152,14 @@ class Trainer(object):
         
         # contruct a list of dataset to evaluate
         if eval_train:
-            eval_datasets = [self.train_dataset, self.valid_dataset]
+            eval_datasets = [self.train_dataset + self.valid_dataset]
         else:
-            eval_datasets = self.valid_dataset
+            eval_datasets = [self.valid_dataset]
         
         metric_res = OrderedDict()
         eval_metric = metric
         
-        for i, (inputs, targets) in enumerate(eval_datasets):
+        for i, (dataset_name, inputs, targets) in enumerate(eval_datasets):
 
             lpreds = []
             llabels = []
@@ -173,10 +173,7 @@ class Trainer(object):
             del lpreds
             del llabels
             
-            if eval_train and i == 0:
-                metric_res["dataset_train"] = eval_metric(labels, preds)
-            else:
-                metric_res["dataset_" + str(i)] = eval_metric(labels, preds)
+            metric_res[dataset_name] = eval_metric(labels, preds)
                 
         if save:
             write_json(metric_res, self.evaluation_path, indent=2)

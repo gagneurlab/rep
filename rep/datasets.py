@@ -5,7 +5,7 @@ import rep.preprocessing as p
 import gin
 
 @gin.configurable
-def rep_blood_expression(x_train_h5, y_train_h5, x_valid_h5, y_valid_h5):
+def rep_blood_expression(x_train_h5, y_train_h5, x_valid_h5, y_valid_h5, label=None):
     
     x_train = p.readh5(x_train_h5)
     y_train = p.readh5(y_train_h5)
@@ -18,6 +18,13 @@ def rep_blood_expression(x_train_h5, y_train_h5, x_valid_h5, y_valid_h5):
     x_valid[0,:] = x_valid[0,:] + 0.001
     y_valid[0,:] = y_valid[0,:] + 0.001
     
-    return (x_train, y_train), (x_valid, y_valid)
+    if label:
+        dataset_name_valid = label + "_valid"
+        dataset_name_train = label + "_train"
+    else:
+        dataset_name_valid = "valid"
+        dataset_name_train = "train"
+    
+    return (dataset_name_train, x_train, y_train), (dataset_name_valid, x_valid, y_valid)
     
     
