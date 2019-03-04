@@ -521,7 +521,8 @@ def get_metadata(annobj, cross_list, index_pat_tissue):
         if info1[gcst.INDIVIDUAL] != info2[gcst.INDIVIDUAL]:
             raise ValueError('Samples where mixed up. Found cross tissue tuples coming from different individuals.')
             
-        patient_tissue_info.iloc[i] = info1[[gcst.INDIVIDUAL, gcst.INDIV_SEQ_ASSAY, gcst.GENDER, gcst.TISSUE, gcst.PARENT_TISSUE]].tolist() + info2[[gcst.TISSUE, gcst.PARENT_TISSUE]].tolist()
+        patient_tissue_info.iloc[i] = info1[[gcst.INDIVIDUAL, gcst.INDIV_SEQ_ASSAY, gcst.GENDER, gcst.TISSUE, gcst.PARENT_TISSUE]].tolist() + \
+                                      info2[[gcst.TISSUE, gcst.PARENT_TISSUE]].tolist()
         
     # Gene information
     gene_info = pd.DataFrame(index=annobj.obs_names)
