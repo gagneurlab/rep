@@ -11,11 +11,11 @@ from kipoi.external.flatten_json import flatten
 from gin_train.utils import write_json
 from gin_train.utils import prefix_dict
 from gin_train.metrics import RegressionMetrics
-
 import gin
 
 import sklearn
 import joblib
+import pandas as pd
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -32,7 +32,8 @@ class Trainer(object):
         valid: validation Dataset (object inheriting from kipoi.data.Dataset)
         output_dir: output directory where to log the training
         cometml_experiment: if not None, append logs to commetml
-        wandb_run:
+        wandb_run: send evaluation scores to the dashbord
+        metadata: use to compute tissue specific metrics
     """
     def __init__(self,
                  model,
@@ -40,13 +41,15 @@ class Trainer(object):
                  valid_dataset,
                  output_dir,
                  cometml_experiment=None,
-                 wandb_run=None):
+                 wandb_run=None,
+                 metadata_file=None):
         
         self.model = model
         self.train_dataset = train_dataset
         self.valid_dataset = valid_dataset
         self.cometml_experiment = cometml_experiment
         self.wandb_run = wandb_run
+        self.metadata = self.read_decompress(metadata_file)
 
         # setup the output directory
         self.set_output_dir(output_dir)
@@ -67,6 +70,27 @@ class Trainer(object):
         self.history_path = f"{self.output_dir}/history.csv"
         self.evaluation_path = f"{self.output_dir}/evaluation.valid.json"
     
+    
+    def read_decompress(self, file):
+        """Read and decompress metadata
+        
+        Args:
+            file (str): file name which contain a valid serialized json
+                        dict_keys(['gene_metadata', 'patient_tissue_metadata'])
+                        value of the key should be dataframes
+        Returns:
+            uncompress json format of the metadata
+        """
+        
+        with open(file,'r') as json_file:  
+            data = json.load(json_file)
+            
+        # decompress dataframes:
+        for key in data:
+            data[key] = data[key].read_json()
+        
+        return data
+        
     
     ##########################################################################
     ###########################    Train   ###################################
