@@ -15,6 +15,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import SparsePCA
 from sklearn.decomposition import PCA
+from sklearn.pipeline import Pipeline
 # from sklearn.ensemble import GradientBoostingRegressor
 from scipy.stats import pearsonr, spearmanr
 
@@ -22,7 +23,7 @@ from rep import evaluate as e
 
 class Linear_Regression():
     
-    def __init__(self,Xs_train,Ys_train,Xs_valid,Ys_valid):
+    def __init__(self, Xs_train, Ys_train, Xs_valid, Ys_valid):
         
         self.Xs = Xs_train
         self.Ys = Ys_train
@@ -35,9 +36,7 @@ class Linear_Regression():
         
         # avoid same value for the entire column error for lasso
         self.Xs[0,:] = self.Xs[0,:] + 0.001
-#         self.Ys[0,:] = self.Ys[0,:] + 0.001
         self.Xs_valid[0,:] = self.Xs_valid[0,:] + 0.001
-#         self.Ys_valid[0,:] = self.Ys_valid[0,:] + 0.001
     
     
     def run(self,model='train_lassolars_model'):   
@@ -55,22 +54,22 @@ class Linear_Regression():
         return predict_y
     
     
-    def run_batches(self,model,n=300):
+    def run_batches(self,model='train_lassolars_model',n=300):
         '''Linear regression over batches. The final model is given by the avg()
            This works only with lasso lars 
         '''
         
         # train
         reg = []
-        for i in range(0,Xs.shape[0],n):
-            if i + 100 < Xs.shape[0]:
+        for i in range(0,self.Xs.shape[0],n):
+            if i + n < self.Xs.shape[0]:
                 reg.append(self.dict_models[model](self.Xs[i:i+n,:], self.Ys[i:i+n,:]))
             else:
                 reg.append(self.dict_models[model](self.Xs[i:,:], self.Ys[i:,:]))
         
         # average over the parameters
         for i in range(len(reg[0].estimators_)):
-            e = np.zeros((1000))
+            e = np.zeros(self.Xs.shape[1])
             intercept = 0
             for r in reg:
                 e += r.estimators_[i].coef_
@@ -99,7 +98,7 @@ class Linear_Regression():
     def train_lassolars_model_multioutput(self,train_x, train_y):
         
         train_x[0,:] = train_x[0,:] + 0.001
-#         train_y[0,:] = train_y[0,:] + 0.001
+        train_y[0,:] = train_y[0,:] + 0.001
 
         reg = MultiOutputRegressor(LassoLarsCV(cv=5, max_iter=50, normalize=False), n_jobs = 10)
         reg.fit(train_x,train_y) 

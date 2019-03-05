@@ -32,6 +32,8 @@ import numpy as np
 from scipy import sparse
 
 from rep.constants import ANNDATA_CST as a
+from rep.constants import GTEX_CST as gcst
+from rep.constants import METADATA_CST as mcst
 
 ########################################## I/O #########################################################
 ########################################################################################################
@@ -55,6 +57,7 @@ def readJSON(name):
         data = json.load(json_file)
     return data
 
+
 def writeJSON(obj,filename):
     with open(filename,'w') as f:
         json.dump(obj, f, sort_keys=True, indent=4)
@@ -69,8 +72,11 @@ def print_anndata(toprintanndata):
     print(toprintanndata.obs.iloc[:5,:5])
     print()
 
+    
 def load_df(csvfile, header=None, delimiter=",", index_col=0):
     return pd.read_csv(os.path.abspath(csvfile), header=header, delimiter=delimiter, index_col=index_col)
+
+
 
 ########################################## Genomic annotation ##########################################
 ########################################################################################################
@@ -176,6 +182,7 @@ def raw_counts2fpkm(annobj,annotation):
     return norm_X
 
 
+
 ########################################## Transform function ##########################################
 ########################################################################################################
 
@@ -184,15 +191,17 @@ def mylog(df):
     """
     return df.apply(lambda x: math.log(x+1))
 
+
 def mylog10(df):
     """log10(df) using pseudocounts
     """
     return np.log10(df+1)
 
 
-
 # variable which stores reference to function
 function_mappings = {'log':mylog, 'log10':mylog10 }
+
+
 
 ########################################## Anndata Summ Exp.  ##########################################
 ########################################################################################################
@@ -249,6 +258,7 @@ def load(filename, backed=False, samples_anno=None, genes_anno=None, sep=","):
     load_genes(annobj, genes_anno, sep)
 
     return annobj
+
 
 def load_samples(obj, csvfile, sep=","):
     """Load samples (columns) description for the summarized experiment
@@ -357,6 +367,8 @@ def save(annobj, outname=None):
     
     return name
 
+
+
 ########################################## Filter anndata Summ Exp.  ###################################
 ########################################################################################################
 
@@ -446,6 +458,7 @@ def filter_anndata_by_region(annobj, filterJson, regions, format):
     pass
 
 
+
 ########################################## Split and compute pairs   ###################################
 ########################################################################################################
 
@@ -485,8 +498,48 @@ def arrangements(list_of_samples, n=None):
     return [p for p in permutations(list_of_samples, n)]
 
 
+def get_metadata(annobj, cross_list, index_pat_tissue):
+    """Get additional metadata for the cross tissue matrix pairs
+    
+    Args:
+        annobj (:obj:AnnData):
+        cross_list (:array(tuple)): tissue pairs
+        index_pat_tissue: index for the cross tissue matrix pairs
+    
+    Return:
+        json object containing information about the rows and columns of cross tissue matrix
+        row: gene, gene annotation
+        column: individual, from_tissue, to_tissue, available WGS/WES
+    """
+    
+    # Get Individual x Tissue (from, to) info
+    patient_tissue_info = pd.DataFrame(index=index_pat_tissue, columns=[gcst.INDIVIDUAL, gcst.INDIV_SEQ_ASSAY, gcst.GENDER, gcst.FROM_TISSUE, gcst.FROM_PARENT_TISSUE, gcst.TO_TISSUE, gcst.TO_PARENT_TISSUE])    
+    
+    for i, (sample1, sample2) in enumerate(cross_list): 
+        info1 = annobj.var.loc[sample1,:]
+        info2 = annobj.var.loc[sample2,:]
+        
+        if info1[gcst.INDIVIDUAL] != info2[gcst.INDIVIDUAL]:
+            raise ValueError('Samples where mixed up. Found cross tissue tuples coming from different individuals.')
+            
+        patient_tissue_info.iloc[i] = info1[[gcst.INDIVIDUAL, gcst.INDIV_SEQ_ASSAY, gcst.GENDER, gcst.TISSUE, gcst.PARENT_TISSUE]].tolist() + \
+                                      info2[[gcst.TISSUE, gcst.PARENT_TISSUE]].tolist()
+        
+    # Gene information
+    gene_info = pd.DataFrame(index=annobj.obs_names)
+    
+    return {mcst.GENE_METADATA:gene_info.to_json(),
+            mcst.INDIV_TISSUE_METADATA:patient_tissue_info.to_json()}
+    
+        
+
 def build_x_y(annobj, cross_list, input_transform=None, onlyBlood = False):
-    """Build the two matrices X (train) and Y (labels)
+    """Build the cross tissue matrix pairs X (train) and Y (labels)
+       Cross tissue matrix pairs:
+            - x_ij correspond to expression of tissue i in gene j , x_ij in X
+            - y_ij correspond to expression of tissue i in gene j, y_ij in Y
+            - (x_ij, y_ij) -> all arrangements of 2 elements for the expression in invidividual K acroos all available tissues
+            - where x_ij = y_ij are removed (same tissue)
 
     Args:
         annobj (:obj:AnnData):
@@ -526,10 +579,13 @@ def build_x_y(annobj, cross_list, input_transform=None, onlyBlood = False):
     slice_x = [access[x] for (x,_) in cross_list]
     slice_y = [access[y] for (_,y) in cross_list]
     
-#     mydata = sparse.csc_matrix(m)
+
     mydata = np.array(m)
     
-    return (mydata[:,slice_x].T, mydata[:,slice_y].T, index_elem, annobj.obs_names)
+    # compute the metadata for the cross tissue matrix
+    metadata = get_metadata(annobj, cross_list, index_elem)
+    
+    return (mydata[:,slice_x].T, mydata[:,slice_y].T, index_elem, annobj.obs_names, metadata)
 
 
 def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=None,
@@ -588,9 +644,9 @@ def rnaseq_cross_tissue(anndata_obj, individuals, gene_ids, target_transform=Non
     anndata_filtered_var = anndata_obj[:, samples]
     anndata_sliced = anndata_filtered_var[gene_ids,:]
     
-    (X, Y, rownames, columns) = build_x_y(anndata_sliced, cross_list, input_transform=input_transform, onlyBlood = onlyBlood)
+    (X, Y, rownames, columns, metadata) = build_x_y(anndata_sliced, cross_list, input_transform=input_transform, onlyBlood = onlyBlood)
     
-    return (X, Y, rownames, columns)
+    return (X, Y, rownames, columns, metadata)
 
 
 def sum_tissues_per_individual(info, individuals):

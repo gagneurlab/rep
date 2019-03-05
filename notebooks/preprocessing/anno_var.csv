@@ -1,7 +1,0 @@
-Sample,Gender,Tissue,Individual,Technology
-T1_s1,F,Tissue1,Sample1,rnaseq
-T2_s2,M,Tissue2,Sample2,rnaseq
-T3_s1,F,Tissue3,Sample1,rnaseq
-T4_s2,M,Tissue4,Sample2,rnaseq
-T5_s1,M,Tissue5,Sample1,rnaseq
-T6_s1,M,Tissue6,Sample1,rnaseq
