@@ -76,27 +76,7 @@ class Trainer(object):
         self.evaluation_path = f"{self.output_dir}/evaluation.valid.json"
     
     
-    def read_decompress(self, file):
-        """Read and decompress metadata
-        
-        Args:
-            file (str): file name which contain a valid serialized json
-                        dict_keys(['gene_metadata', 'patient_tissue_metadata'])
-                        value of the key should be dataframes
-        Returns:
-            uncompress json format of the metadata
-        """
-        
-        with open(file,'r') as json_file:  
-            data = json.load(json_file)
-            
-        # decompress dataframes:
-        for key in data:
-            data[key] = data[key].read_json()
-        
-        return data
-        
-    
+
     ##########################################################################
     ###########################    Train   ###################################
     ##########################################################################
@@ -240,7 +220,8 @@ class SklearnPipelineTrainer(Trainer):
                  output_dir,
                  cometml_experiment=None,
                  wandb_run=None):
-        super(SklearnPipelineTrainer,self).__init__(model,
+
+        Trainer.__init__(self,model,
                  train_dataset,
                  valid_dataset,
                  output_dir,
