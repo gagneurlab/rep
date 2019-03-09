@@ -14,9 +14,16 @@ from gin_train.metrics import RegressionMetrics
 import gin
 
 import sklearn
+import torch
+from torch.utils.data import TensorDataset
+
 import joblib
 import pandas as pd
 from abc import ABCMeta, abstractmethod
+
+import rep.models
+
+torch.manual_seed(7)
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.NullHandler())
@@ -69,27 +76,7 @@ class Trainer(object):
         self.evaluation_path = f"{self.output_dir}/evaluation.valid.json"
     
     
-    def read_decompress(self, file):
-        """Read and decompress metadata
-        
-        Args:
-            file (str): file name which contain a valid serialized json
-                        dict_keys(['gene_metadata', 'patient_tissue_metadata'])
-                        value of the key should be dataframes
-        Returns:
-            uncompress json format of the metadata
-        """
-        
-        with open(file,'r') as json_file:  
-            data = json.load(json_file)
-            
-        # decompress dataframes:
-        for key in data:
-            data[key] = data[key].read_json()
-        
-        return data
-        
-    
+
     ##########################################################################
     ###########################    Train   ###################################
     ##########################################################################
@@ -233,7 +220,8 @@ class SklearnPipelineTrainer(Trainer):
                  output_dir,
                  cometml_experiment=None,
                  wandb_run=None):
-        super(SklearnPipelineTrainer,self).__init__(model,
+
+        Trainer.__init__(self,model,
                  train_dataset,
                  valid_dataset,
                  output_dir,
@@ -305,8 +293,8 @@ class PyTorchTrainer(Trainer):
         
    
     def check_model(self):
-        if not isinstance(self.model, torch.nn.Module):
-            raise ValueError("model is not a torch.nn.Module")
+        if not isinstance(self.model, rep.models.LinearRegressionCustom):
+            raise ValueError("model is not a rep.models.LinearRegressionCustom")
     
     
     def fit(self, inputs, targets, epochs=10, batch_size=256, num_workers=8):  
@@ -315,26 +303,29 @@ class PyTorchTrainer(Trainer):
             epoch +=1
             
             # define dataset
-            trainset = TensorDataset(inputs, targets)
+            trainset = torch.utils.data.TensorDataset(torch.Tensor(inputs),torch.Tensor(targets))
             
             # reset gradients
             self.model.get_optimiser.zero_grad()
             
             # use mini-batches to train the model
-            trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+            trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, 
+                                                      shuffle=False, num_workers=num_workers)
             
             for i, data in enumerate(trainloader, 0):
-                inputs, labels = data    
-                inputs, labels = Variable(inputs), Variable(labels)
-                self.fit_minibatch(intputs, labels)
+                inp, labels = data    
+                inp, labels = torch.autograd.Variable(inp), torch.autograd.Variable(labels)
+#                 print('Batch idx {}, data shape {}, target shape {}'.format(i, inp.shape, 
+#                                                                             lab.shape))
+                self.fit_minibatch(inp, labels)
                 
-            print('epoch {}, loss {}'.format(epoch,self.loss.data[0]))
+            print('epoch {}, loss {}'.format(epoch,self.loss))
     
     
-    def fit_minibatch(inputs, labels):
-        
+    def fit_minibatch(self, inputs, labels):
+            
         # forward to get predicted values
-        self.outputs = self.model.forward(inputs)
+        self.outputs = self.model.get_model.forward(inputs)
         
         # compute loss
         self.loss = self.model.get_criterion(self.outputs, labels)
@@ -352,7 +343,3 @@ class PyTorchTrainer(Trainer):
     
     def save(self):
         torch.save(self.model.get_model, self.ckp_file)
-        
-    
-
-

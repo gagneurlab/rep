@@ -16,6 +16,8 @@ from gin import config
 import torch
 import torch.nn as nn
 
+torch.manual_seed(7)
+
 ####################### Linear Regression / Sklearn ######################
 
 # configurable params
@@ -32,13 +34,31 @@ def lasso_model(n_components, cv, max_iter, normalize, n_jobs):
         (ii) Dimensionality reduction using PCA - and its variation i.e. KernelPCA / IncrementalPCA
         (iii) Multioutput Regression using LassoLars
     """
-    p = Pipeline([('StandardScaler',StandardScaler(copy=True, with_mean=True, with_std=True)),
+    p = Pipeline([
+        ('StandardScaler',StandardScaler(copy=True, with_mean=True, with_std=True)),
                     ('DimensionalityReductionPCA',PCA(n_components = n_components)),
                     ('LassoLarsMultiOutputRegressor',MultiOutputRegressor(LassoLarsCV(cv = cv, max_iter = max_iter, normalize = normalize, n_jobs = n_jobs), n_jobs = 1))])
     return p
 
 
 ####################### Linear Regression / PyTorch ######################
+
+# configurable params
+gin.external_configurable(torch.nn.MSELoss,module='torch.nn')
+gin.external_configurable(torch.optim.Adam,module='torch.optim')
+
+@gin.configurable
+def torch_linear_model(input_dim, output_dim, criterion, optimiser, l_rate):
+    """Linear Regression Pipeline in Pytorch
+    """
+    # how to create a Linear regression using pytorch
+    m = LinearRegressionCustom(input_dim,
+                               output_dim,
+                               criterion,
+                               optimiser,
+                               l_rate)
+    
+    return m
 
 @gin.configurable
 class LinearRegressionCustom(nn.Module):
