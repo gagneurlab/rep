@@ -258,9 +258,14 @@ We compare the TPM of gene = 'ENSG00000000003.14' between the GTEx Portal result
 
 ```python
 # rander svg img into jupyter-lab notebook
-from IPython.display import SVG, display
-def show_svg(url):
-    display(SVG(url=url))
+from IPython.display import SVG, display, Image
+def show_img(path):
+    extension = path.split(".")
+    extension = extension[-1]
+    if extension == 'svg': display(SVG(filename=path))
+    else: 
+        img = Image(path)
+        display(img)
 ```
 
 
@@ -340,9 +345,18 @@ py.iplot(fig, filename='tpm_per_tissue_' + gene)
 
 
 ```python
-show_svg('file:///data/ouga/home/ag_gagneur/giurgiu/Downloads/gene-exp-plot.svg')
+show_img('2_normalize_gtex_files/tpm_ENSG00000000003.png')
 ```
 
 
-![svg](2_normalize_gtex_files/2_normalize_gtex_25_0.svg)
+![png](2_normalize_gtex_files/2_normalize_gtex_25_0.png)
+
+
+
+```python
+show_img('2_normalize_gtex_files/2_normalize_gtex_25_0.svg')
+```
+
+
+![svg](2_normalize_gtex_files/2_normalize_gtex_26_0.svg)
 
