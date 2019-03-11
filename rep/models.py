@@ -2,6 +2,9 @@
 Sklearn model
 PyTorch nn.Module classes or other models
 """
+import numpy as np
+import pandas as pd
+
 import sklearn as sk
 from sklearn.multioutput import MultiOutputRegressor
 from sklearn.linear_model import LassoLarsCV
@@ -113,7 +116,29 @@ class LinearRegressionCustom(nn.Module):
     
     def set_model(self, m):
         self.linear = m
-        
+
+####################### Baseline Model ######################
+
+# def compute_baseline(annobj):
+#     """Compute average for each tissue across samples
+    
+#     Args:
+#         annobj (:obj:Anndata): summarized experiment genes x samples
+    
+#     Returns:
+#         DataFrame containing x_ij - mean expression of gene j in tissue i.
+#     """
+#     tissues = sorted(annobj.var['Tissue'].drop_duplicates().tolist())
+#     Y_mean_tissue = np.zeros((len(annobj.obs_names),len(tissues)))
+    
+#     for t in tissues:
+#         slice_bytissue = annobj[:,annobj.var['Tissue'] == t]    
+#         mean_value = np.mean(slice_bytissue.X,axis=1)
+#         Y_mean_tissue[:,tissues.index(t)] = mean_value
+    
+#     out = pd.DataFrame(data = Y_mean_tissue, index = annobj.obs_names, columns = tissues)
+#     return out.transpose() 
+
         
 if __name__ == "__main__":
     
