@@ -13,6 +13,10 @@ class GTEX_CST:
     TISSUE = 'Tissue'
     PARENT_TISSUE = 'Parent_Tissue'
     GENDER = 'Gender'
+    FROM_SAMPLE = 'From_sample'
+    TO_SAMPLE = 'To_sample'
+    TYPE = 'Type'
+    INDEX = 'Index'
     
 class METADATA_CST:
     GENE_METADATA = 'gene_metadata'
