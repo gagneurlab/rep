@@ -39,11 +39,8 @@ import seaborn as sns
 import h5py
 import anndata
 
-from rep import preprocessing as p
-from rep.linear_regression import Linear_Regression
-from rep.linear_regression import Transform
-from rep.linear_regression import FeatureReduction
-from rep import evaluate as e
+from rep import preprocessing_new as p
+from rep import plot as po
 
 import plotly
 import plotly.plotly as py
@@ -79,21 +76,34 @@ file = os.path.join(os.readlink(os.path.join("..","..","data")),"processed","gte
 gtex = p.load(file)
 
 # remove genes (x-axis) with no counts accross all samples (y-axis, tissues x invididuals)
-zero_elem = np.where(~gtex.X.any(axis=1))[0]
+zero_elem = np.where(~gtex.X.any(axis=0))[0]
 
 # remove noncoding genes
 protein_coding = []
 with open(os.path.join(os.readlink(os.path.join("..","..","data")),"raw","annotation","gencode_v25_protein_coding_genes.txt")) as f:
     for line in f: protein_coding.append(line.replace("\n","").split(".")[0])
 
-tokeep = [gene for i,gene in enumerate(gtex.obs_names) if i not in zero_elem and gene.split(".")[0] in protein_coding]
-filtered_gtex = gtex[tokeep]
+tokeep = [gene for i,gene in enumerate(gtex.genes_names) if i not in zero_elem and gene.split(".")[0] in protein_coding]
+```
+
+
+```python
+filtered_gtex = gtex[:,tokeep]
+```
+
+
+```python
 del gtex, zero_elem
 ```
 
 
 ```python
-p.save(filtered_gtex,os.path.join(os.readlink(os.path.join("..","..","data")),"processed","gtex","recount","recount_gtex_filtered.h5ad"))
+repobj = p.RepAnnData(X=filtered_gtex.X,genes_var=filtered_gtex.var,samples_obs=filtered_gtex.obs)
+```
+
+
+```python
+repobj.save(os.path.join(os.readlink(os.path.join("..","..","data")),"processed","gtex","recount","recount_gtex_filtered.h5ad"))
 ```
 
 
@@ -135,7 +145,7 @@ p.writeJSON(gene_annotation, os.path.join(os.readlink(os.path.join("..","..","da
 
 ```python
 # check if the annotation is consistent between recount2 and gencode.v25
-annotation_recount = filtered_gtex.obs.index.tolist()
+annotation_recount = repobj.genes.index.tolist()
 for a in annotation_recount:
     if a not in gene_annotation:
         print("Annotation not found: ", a)
@@ -153,10 +163,17 @@ Normalize data to FPKMs. (Counts of mapped fragments * 1000 * 1000) / (Length of
 ```python
 # raw counts to FPKM
 # (Counts of mapped fragments * 1000 * 1000) / (Length of transcript * Total Count of mapped fragments)
-x_norm = p.raw_counts2fpkm(filtered_gtex, gene_annotation)
-norm_gtex = anndata.AnnData(X=x_norm,obs=filtered_gtex.obs,var=filtered_gtex.var)
-p.save(norm_gtex,os.path.join(os.readlink(os.path.join("..","..","data")),"processed","gtex","recount","recount_gtex_norm_fpkm.h5ad"))
+x_norm = p.raw_counts2fpkm(repobj, gene_annotation)
+norm_gtex = p.RepAnnData(X=x_norm,samples_obs=repobj.samples,genes_var=repobj.genes)
+norm_gtex.save(os.path.join(os.readlink(os.path.join("..","..","data")),"processed","gtex","recount","recount_gtex_norm_fpkm.h5ad"))
 ```
+
+
+
+
+    '/s/project/rep/processed/gtex/recount/recount_gtex_norm_fpkm.h5ad'
+
+
 
 Plot correlation between raw matrix and normalized matrix
 
@@ -164,7 +181,7 @@ Plot correlation between raw matrix and normalized matrix
 ```python
 fig = plt.figure(figsize=(15,5))
 ax1=fig.add_subplot(131)
-plt.hist(np.log2(filtered_gtex.X.reshape(1,-1).squeeze() +  0.000000001))
+plt.hist(np.log2(repobj.X.reshape(1,-1).squeeze() +  0.000000001))
 plt.title("raw counts")
 plt.xlabel("raw counts (log2)")
 # ax1.set_xscale('log', basex=2)
@@ -178,29 +195,15 @@ plt.xlabel("fpkm (log2)")
 # plt.xlim(0,1024)
 
 fig.add_subplot(133)
-corr_values = pd.Series([spearmanr(filtered_gtex.X[i,:], norm_gtex.X[i, :])[0]  for i in range(norm_gtex.X.shape[0])])
+corr_values = pd.Series([stats.spearmanr(repobj.X[:, i], norm_gtex.X[:, i])[0]  for i in range(repobj.X.shape[1])])
 plt.hist(corr_values.dropna())
 plt.title("corr raw counts and fpkm")
 
 plt.show()
 ```
 
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
 
-
-
-![png](2_normalize_gtex_files/2_normalize_gtex_15_1.png)
+![png](2_normalize_gtex_files/2_normalize_gtex_18_0.png)
 
 
 #### 2.3. Raw counts to TPMs
@@ -210,9 +213,9 @@ TPM_i = 10^6 * (N_i / L_i) / [Σ_j (N_j / L_j)]
 
 
 ```python
-x_norm_tpm = p.raw_counts2tpm(filtered_gtex, gene_annotation)
-norm_gtex_tpm = anndata.AnnData(X=x_norm_tpm,obs=filtered_gtex.obs,var=filtered_gtex.var)
-p.save(norm_gtex_tpm,os.path.join(os.readlink(os.path.join("..","..","data")),"processed","gtex","recount","recount_gtex_norm_tmp.h5ad"))
+x_norm_tpm = p.raw_counts2tpm(repobj, gene_annotation)
+norm_gtex_tpm = p.RepAnnData(X=x_norm_tpm,samples_obs=repobj.samples,genes_var=repobj.genes)
+norm_gtex_tpm.save(os.path.join(os.readlink(os.path.join("..","..","data")),"processed","gtex","recount","recount_gtex_norm_tmp.h5ad"))
 ```
 
 
@@ -238,15 +241,8 @@ plt.xlabel("tpm")
 
 
 
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
-    DEBUG:matplotlib.axes._base:update_title_pos
 
-
-
-![png](2_normalize_gtex_files/2_normalize_gtex_18_2.png)
+![png](2_normalize_gtex_files/2_normalize_gtex_21_1.png)
 
 
 Compare the parsed data with GTEx data online for several genes
@@ -271,8 +267,8 @@ def show_img(path):
 
 ```python
 # list of tissues and parent tissues
-tissues = sorted(list(set(norm_gtex_tpm.var['Tissue'].tolist())))
-parent_tissue = sorted(list(set(norm_gtex_tpm.var['Parent_Tissue'].tolist())))
+tissues = sorted(list(set(norm_gtex_tpm.samples['Tissue'].tolist())))
+parent_tissue = sorted(list(set(norm_gtex_tpm.samples['Parent_Tissue'].tolist())))
 
 # generate colors
 palette = sns.color_palette(None, len(parent_tissue)).as_hex()
@@ -288,11 +284,11 @@ data = []
 # OPALIN - brain enriched ENSG00000197430.10
 # TTN - muscles enriched ENSG00000155657.25 - hier they cut at 1200 (removed an outlier with TPM=8000 ish)
 gene = 'ENSG00000000003.14'
-gtex_tmp = norm_gtex_tpm[gene]
+gtex_tmp = norm_gtex_tpm[:,gene] # after filtering this is converted to AnnData
 for t in tissues:
-    pt = list(set(gtex_tmp[:,gtex_tmp.var['Tissue'] == t].var['Parent_Tissue'].tolist()))[0]
+    pt = list(set(gtex_tmp[gtex_tmp.obs['Tissue'] == t].obs['Parent_Tissue'].tolist()))[0]
     color_pt = palette[parent_tissue.index(pt)]
-    data.append(graph_objs.Box(y=gtex_tmp[:,norm_gtex_tpm.var['Tissue'] == t].X, 
+    data.append(graph_objs.Box(y=gtex_tmp[norm_gtex_tpm.obs['Tissue'] == t].X, 
                                 name=t,
                                 fillcolor= color_pt,
                                 marker = dict(
@@ -301,38 +297,8 @@ for t in tissues:
 
 
 ```python
-# generate layout
-layout = graph_objs.Layout(
-    xaxis=dict(
-        title='Tissues',
-         titlefont=dict(
-            family='Courier New, monospace',
-            size=18,
-            color='#7f7f7f'
-        ),
-        tickangle=45        
-    ),
-    yaxis=dict(
-        title='TPM',
-         titlefont=dict(
-            family='Courier New, monospace',
-            size=18,
-            color='#7f7f7f'
-        )
-    ),
-    height=600,
-    margin=graph_objs.layout.Margin(
-        l=50,
-        r=50,
-        b=250,
-        t=100,
-        pad=4
-    ),
-    title = "recount2 - Expression of " + gene
-)
-
 # plot figure
-fig = graph_objs.Figure(data=data, layout=layout)
+fig = graph_objs.Figure(data=data, layout=po.get_layout(_xlab='Tissues',_ylab='TPM',_title= "recount2 - Expression of " + gene))
 py.iplot(fig, filename='tpm_per_tissue_' + gene)
 ```
 
@@ -349,7 +315,7 @@ show_img('2_normalize_gtex_files/tpm_ENSG00000000003.png')
 ```
 
 
-![png](2_normalize_gtex_files/2_normalize_gtex_25_0.png)
+![png](2_normalize_gtex_files/2_normalize_gtex_28_0.png)
 
 
 
@@ -358,5 +324,5 @@ show_img('2_normalize_gtex_files/2_normalize_gtex_25_0.svg')
 ```
 
 
-![svg](2_normalize_gtex_files/2_normalize_gtex_26_0.svg)
+![svg](2_normalize_gtex_files/2_normalize_gtex_29_0.svg)
 

@@ -169,6 +169,19 @@ def writeJSON(obj, filename):
     with open(filename, 'w') as f:
         json.dump(obj, f, sort_keys=True, indent=4)
 
+def read_csv_one_column(filename):
+    """Reads a list of elements from the file
+
+    Args:
+        filename:
+
+    Returns:
+         list of elements
+    """
+    l = []
+    with open(filename, 'r') as f:
+        for line in f: l.append(line.replace("\n","")[0])
+    return l
 
 # def print_anndata(toprintanndata):
 #     print("anndata.X ----")
@@ -964,19 +977,20 @@ def rnaseq_train_valid_test(anndata_obj, individuals, gene_ids, target_transform
                                                target_transform=target_transform, input_transform=input_transform,
                                                shuffle=shuffle, onlyBlood=onlyBlood)
 
-        if X is not None and Y is not None and metadata is not None:
+        # skip samples if one of the X, Y, metadata are none
+        if X is None or Y is None or metadata is None: continue
 
-            # add type (train, valid, test)
-            metadata[gcst.TYPE] = pd.Series(key, index=metadata.index)
+        # add type (train, valid, test)
+        metadata[gcst.TYPE] = pd.Series(key, index=metadata.index)
 
-            # extend df_samples
-            df_samples = df_samples.append(metadata)
+        # extend df_samples
+        df_samples = df_samples.append(metadata)
 
-            x_aux = pd.DataFrame(columns=gene_ids, index=metadata[gcst.INDEX].tolist(), data=X)
-            X_large = X_large.append(x_aux)
+        x_aux = pd.DataFrame(columns=gene_ids, index=metadata[gcst.INDEX].tolist(), data=X)
+        X_large = X_large.append(x_aux)
 
-            y_aux = pd.DataFrame(columns=gene_ids, index=metadata[gcst.INDEX].tolist(), data=Y)
-            Y_large = Y_large.append(y_aux)
+        y_aux = pd.DataFrame(columns=gene_ids, index=metadata[gcst.INDEX].tolist(), data=Y)
+        Y_large = Y_large.append(y_aux)
 
     # set index of df_samples
     df_samples.set_index(gcst.INDEX)
@@ -1000,8 +1014,8 @@ def remove_best(real, expected, subset, tissue_info, epsilon, n_samples):
     for i in range(len(subset)):
         f = float(sum_tissues_per_individual(tissue_info, subset[:i] + subset[i + 1:]) / n_samples)
 
+        # reach convergence
         if -epsilon <= (expected - f) <= epsilon:  # found optimum
-
             sample_id = subset[i]
             subset.pop(i)
 
@@ -1050,7 +1064,7 @@ def rebalance(train, valid, test, tissues_info, n_samples, fraction=[3. / 5, 1. 
 
     while (not balanced and i < iterations):
 
-        print("Iteration: ", i)
+        # print("Iteration: ", i)
         i += 1
 
         # check if the train valid test are balances in terms of samples
@@ -1156,6 +1170,8 @@ def split_by_individuals(annobj, fraction=[3. / 5, 1. / 5, 1. / 5], groupby=['Ge
     # rebalance if at least 3xindividuals
     if (len(train_individuals) + len(valid_individuals) + len(test_individuals)) > 3:
         rebalance(train_individuals, valid_individuals, test_individuals, info_tissues, annobj.samples.shape[0])
+        print(
+        "Individual split after balancing: ", len(train_individuals), len(valid_individuals), len(test_individuals))
 
     return (train_individuals, valid_individuals, test_individuals)
 
