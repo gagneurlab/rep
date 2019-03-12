@@ -129,8 +129,8 @@ class RepAnnData(anndata.AnnData):
         return name
 
     @staticmethod
-    def read_h5ad(filename):
-        obj = anndata.read_h5ad(filename)
+    def read_h5ad(filename, backed=None):
+        obj = anndata.read_h5ad(filename, backed=backed)
         r = RepAnnData(X=obj.X, genes_var=obj.var, samples_obs=obj.obs)
         return r
 
