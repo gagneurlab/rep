@@ -1,4 +1,4 @@
-
+#/bin/python
 
 
 class rangeInterval(object): #renamed to avoid conflict with genomic interval
@@ -122,7 +122,7 @@ class ZarrVariantPredWriter(object):
         gene, sample and allele can differ from prediction to prediction
         expects all locations on gene in one go
         """
-        
+        print("....writing batch")
         for inputIdx,predPerInput in enumerate(annotatedPreds["preds"]):
             geneId=annotatedPreds["metadata"]["gene_id"][inputIdx]
             sampleId=annotatedPreds["metadata"]["sample_id"][inputIdx]
@@ -130,7 +130,6 @@ class ZarrVariantPredWriter(object):
             alleleIdx=annotatedPreds["metadata"]["allele_id"][inputIdx]
             geneIdx=self.data.attrs["genes"][geneId]
             sampleIdx=self.data.attrs["samples"][sampleId]
-            print(predPerInput.shape)
             self.data[geneIdx,sampleIdx,alleleIdx]=predPerInput
 
         return
@@ -142,15 +141,13 @@ class ZarrVariantPredWriter(object):
         pass 
 
 
-
-#data-loader tut here: https://stanford.edu/~shervine/blog/pytorch-how-to-generate-data-parallel
 from torch.utils.data import Dataset
 #formerly "repDataloader"
 class RepDataset(Dataset):
-    from torch.utils.data import Dataset
+    
     from pybedtools import Interval
     
-    def __init__(self,vcfFile,refGenFasta,tssFile,n_upstream,n_downstream,sample_ids,gene_ids=None):
+    def __init__(self,refGenFasta,vcfFile,tssFile,n_upstream,n_downstream,sample_ids,gene_ids=None):
         """set instance-vars, read TSS completely, load (dummy) VCFfastaExtractor"""
 
         import pandas as pd
@@ -161,11 +158,12 @@ class RepDataset(Dataset):
         
         self.vcfFile=vcfFile
         self.refGenFasta=refGenFasta
-        self.varExtractor=AllelicVCFSeqExtractor('/s/genomes/human/hg38/hg38.fa',"/data/ouga/home/ag_gagneur/reinharj/REP/rep/notebooks/bazenji/test.vcf.gz")
+        self.varExtractor=None
         #AllelicVCFSeqExtractor(self.refGenFasta,vcfFile)#VcfFastaDummy(vcfFile,refGenFasta)
         
         self.sampleIDs=sample_ids
-        self.interval=rangeInterval(n_upstream,n_downstream)
+        self.interval=None
+        self.refInterval=rangeInterval(n_upstream,n_downstream)
         
         
         #TODO use only prot-coding? Separate file or bound to schema of example file?
@@ -183,7 +181,15 @@ class RepDataset(Dataset):
         return len(self.sampleIDs)*len(self.geneIDs)
     def __getitem__(self,idx):
         import numpy as np
+        import copy
         """transform idx to sample- and tss-id, then get both alleles from extractor"""
+        
+        #each worker needs own file handle:
+        if self.varExtractor==None:
+            self.varExtractor=AllelicVCFSeqExtractor(self.refGenFasta,self.vcfFile)
+        if self.interval==None:
+            self.interval=copy.deepcopy(self.refInterval)
+        
         sampleIdx=int(idx/len(self.tssCollection))
         tssIdx=int(idx%len(self.tssCollection))
         
@@ -193,7 +199,7 @@ class RepDataset(Dataset):
         tssStart=self.tssCollection.loc[tssIdx,"TSS"]
         
         self.interval.setAnchor(tssStart)
-        genomic_interval=self.getGenomicInterval(chromo,tssStart,strand)  
+        genomic_interval=self.getGenomicInterval(chromo,strand)  
         alleles= self.varExtractor.extract(genomic_interval,self.interval.anchor,self.sampleIDs[sampleIdx]) #strand-info where?
         
         #formatting output
@@ -205,14 +211,14 @@ class RepDataset(Dataset):
         returnBatch["metadata"]={"gene_id":np.array([gene_id]*2),"sample_id":np.array([sample_id]*2),"allele_id":np.array([0,1])} 
         return returnBatch
     
-    def getGenomicInterval(self,chromosome,chromoAnchor,strand):
+    def getGenomicInterval(self,chromosome,strand):
         """converts internal interval to bedInterval as used in extractor"""
         from pybedtools import Interval
         
         return Interval(chromosome, start=self.interval.lower, end=self.interval.upper, strand=strand, otherfields=None)
     def get_gene_ids(self):
         return self.geneIDs
-
+        
 
 
 #params
@@ -242,7 +248,7 @@ def pred_and_store():
     
     from torch.utils import data
     from kipoi.data_utils import numpy_collate_concat
-    generator = data.DataLoader(inputData,batch_size=1, collate_fn=numpy_collate_concat,num_workers=10)
+    generator = data.DataLoader(inputData,batch_size=1, collate_fn=numpy_collate_concat,num_workers=30)
 
     import kipoi
     model = kipoi.get_model('Basenji')
