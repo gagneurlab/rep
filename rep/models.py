@@ -37,8 +37,7 @@ def lasso_model(n_components, cv, max_iter, normalize, n_jobs):
         (ii) Dimensionality reduction using PCA - and its variation i.e. KernelPCA / IncrementalPCA
         (iii) Multioutput Regression using LassoLars
     """
-    p = Pipeline([
-        ('StandardScaler',StandardScaler(copy=True, with_mean=True, with_std=True)),
+    p = Pipeline([  ('StandardScaler',StandardScaler(copy=True, with_mean=True, with_std=True)),
                     ('DimensionalityReductionPCA',PCA(n_components = n_components)),
                     ('LassoLarsMultiOutputRegressor',MultiOutputRegressor(LassoLarsCV(cv = cv, max_iter = max_iter, normalize = normalize, n_jobs = n_jobs), n_jobs = 1))])
     return p
