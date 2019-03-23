@@ -184,8 +184,9 @@ class Trainer(object):
             del lpreds
             del llabels
             
-            metric_res[data.dataset_name] = eval_metric(labels, preds, tissue_specific_metadata = data.metadata)
-                
+            # metric_res[data.dataset_name] = eval_metric(labels, preds, tissue_specific_metadata = data.metadata)
+            metric_res[data.dataset_name] = eval_metric(labels, preds, tissue_specific_metadata= None)
+
         if save:
             write_json(metric_res, self.evaluation_path, indent=2)
             logger.info("Saved metrics to {}".format(self.evaluation_path))
@@ -315,7 +316,7 @@ class PyTorchTrainer(Trainer):
             for i, data in enumerate(trainloader, 0):
                 inp, labels = data    
                 inp, labels = torch.autograd.Variable(inp), torch.autograd.Variable(labels)
-#                 print('Batch idx {}, data shape {}, target shape {}'.format(i, inp.shape, 
+#                 print('Batch idx {}, data shape {}, target shape {}'.format(i, inp.shape,
 #                                                                             lab.shape))
                 self.fit_minibatch(inp, labels)
                 

@@ -180,7 +180,7 @@ def read_csv_one_column(filename):
     """
     l = []
     with open(filename, 'r') as f:
-        for line in f: l.append(line.replace("\n","")[0])
+        for line in f: l.append(line.replace("\n",""))
     return l
 
 # def print_anndata(toprintanndata):

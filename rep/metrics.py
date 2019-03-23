@@ -129,20 +129,20 @@ def collapse_name(name):
 def rep_metric(y_true, y_pred, tissue_specific_metadata = None):
     
     # replace Nan with 0 / avoid 0 entries
-    y_true = np.nan_to_num(y_true) + 0.001
-    y_pred = np.nan_to_num(y_pred) + 0.001
+    y_true = np.nan_to_num(np.array(y_true)) + 0.001
+    y_pred = np.nan_to_num(np.array(y_pred)) + 0.001
     
     # create an object with following matrics metrics
     metric_collection = RegressionMetrics() 
     
-    # tissue specific setup
     tissues = [None] # None signalize to run metrics over all tissues
     parent_tissue = None
-    if tissue_specific_metadata:
+
+    # tissue specific setup
+    if tissue_specific_metadata is not None:
         # append all other tissues
-        tissues += list(set(tissue_specific_metadata[mcst.INDIV_TISSUE_METADATA][gcst.TO_TISSUE].tolist()))
-        parent_tissue = list(set(tissue_specific_metadata[mcst.INDIV_TISSUE_METADATA][gcst.TO_PARENT_TISSUE].tolist()))
-        
+        tissues += list(set(tissue_specific_metadata[gcst.TO_TISSUE].tolist()))
+        parent_tissue = list(set(tissue_specific_metadata[gcst.TO_PARENT_TISSUE].tolist()))
         tissues = [None, 'Bladder', 'Spleen']
 
     # metrics dictionary
@@ -152,7 +152,7 @@ def rep_metric(y_true, y_pred, tissue_specific_metadata = None):
     for t in tissues:
         gm = []
         label = collapse_name(t)
-        (y_true_slice, y_pred_slice) = filter_entries(t, gcst.TO_TISSUE, tissue_specific_metadata[mcst.INDIV_TISSUE_METADATA], y_true, y_pred)
+        (y_true_slice, y_pred_slice) = filter_entries(t, gcst.TO_TISSUE, tissue_specific_metadata, y_true, y_pred)
         gm = compute_metrics_per_tissue(gm, y_true_slice, y_pred_slice, label, metric_collection)
         metric_names = list(gm[0])
         for metric_name in metric_names:
