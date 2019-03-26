@@ -91,8 +91,7 @@ def geo_arithm_mean_ratio(y_true, y_pred):
 def metrics_extension(m_temp, y_true, y_pred):
     
     metrics = {"rsquare":rquare,
-              "geo_arithm_mean_ratio":geo_arithm_mean_ratio}
-    
+              "geo_arithm_mean_ratio":geo_arithm_mean_ratio}    
     for m in metrics:
         m_temp[m] = metrics[m](y_true, y_pred)
     
@@ -100,15 +99,12 @@ def metrics_extension(m_temp, y_true, y_pred):
 
 
 def rename(m_temp, label):
-    """Rename labels. Ex. instead of mse -> blood/mse
-    
+    """Rename labels. Ex. instead of mse -> blood/mse    
     """
     if label:
         new_m_temp = OrderedDict()
-
         for key, value in m_temp.items():
             new_m_temp[label + "/" + key] =  value
-
         return new_m_temp
     
     # if label None return unchanged Collection
