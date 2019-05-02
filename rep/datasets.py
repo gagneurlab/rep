@@ -4,6 +4,8 @@ Datasets
 import json
 import pandas as pd
 import numpy as np
+import abc
+from anndata import AnnData
 
 import gin
 import rep.preprocessing_new as p
@@ -46,6 +48,36 @@ class RepDataset(object):
         return self.ds_name
 
 
+    def filter_by(self, from_tissue='Whole Blood',to_tissue='Muscle - Skeletal'):
+        """Filter data by tissue
+        
+        Args:
+            from_tissue (str): input tissue for the prediction
+            to_tissue (str): target tissue for the prediction
+        Returns:
+            RepDataset new object filtered by tissue
+        """
+        input = AnnData(X=self.inp)
+        input.obs = self.met
+        target = AnnData(X=self.tar)
+        target.obs = self.met
+        
+        all_tissues = list(set(self.met['From_tissue'].tolist() + self.met['To_tissue'].tolist()))
+        
+        if from_tissue not in all_tissues or to_tissue not in all_tissues:
+            raise ValueError("Tissue name error")
+        
+        input_new = input[input.obs['From_tissue'] == from_tissue]
+        input_new = input_new[input_new.obs['To_tissue'] == to_tissue]
+        
+        target_new = target[target.obs['From_tissue'] == from_tissue]
+        target_new = target_new[target_new.obs['To_tissue'] == to_tissue]
+        
+        return RepDataset(np.array(input_new.X),
+                          np.array(target_new.X), 
+                          met=input_new.obs, 
+                          ds_name=self.ds_name,
+                          features=self.features)
 
 
 def read_decompress(file):
