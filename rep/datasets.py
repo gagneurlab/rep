@@ -112,3 +112,37 @@ def rep_blood_expression(x_inputs_h5, y_targets_h5, label=None):
 
     return train_dataset, valid_dataset
 
+
+@gin.configurable
+def rep_blood2blood_expression(x_inputs_h5, label=None):
+    
+    x_inputs = p.RepAnnData.read_h5ad(x_inputs_h5)
+
+    # keep X and samples description
+    x_train_all = x_inputs[x_inputs.samples['Type'] == 'train']
+    x_valid_all = x_inputs[x_inputs.samples['Type'] == 'valid']
+
+    x_train = np.array(x_train_all.X)
+    x_valid = np.array(x_valid_all.X)
+  
+    # avoid zero entries
+    x_train[0,:] = x_train[0,:] + 0.00000001
+    x_valid[0,:] = x_valid[0,:] + 0.00000001
+  
+    if label:
+        dataset_name_valid = label + "_valid"
+        dataset_name_train = label + "_train"
+    else:
+        dataset_name_valid = "valid"
+        dataset_name_train = "train"
+
+    metadata_train = x_train_all.obs
+    metadata_valid = x_valid_all.obs
+
+    features_train = x_train_all.var
+    features_valid = x_valid_all.var
+
+    train_dataset = RepDataset(x_train, x_train, metadata_train, dataset_name_train, features_train)
+    valid_dataset = RepDataset(x_valid, x_valid, metadata_valid, dataset_name_valid, features_valid)
+
+    return train_dataset, valid_dataset
