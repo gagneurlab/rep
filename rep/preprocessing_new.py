@@ -124,7 +124,7 @@ class RepAnnData(anndata.AnnData):
                             columns={c: str(c) for c in list(self.samples.columns)},
                             inplace=True)
 
-        self.write_h5ad(name)
+        self.write(name)
 
         return name
 
@@ -143,6 +143,7 @@ class RepAnnData(anndata.AnnData):
 
 ########################################## I/O #########################################################
 ########################################################################################################
+
 
 def readh5(name):
     filename = name
@@ -196,7 +197,23 @@ def read_csv_one_column(filename):
 def load_df(csvfile, header=None, delimiter=",", index_col=0):
     return pd.read_csv(os.path.abspath(csvfile), header=header, delimiter=delimiter, index_col=index_col)
 
+def save_list(filename, data):
+    '''Save array of strings/numeric using a \n delimiter.
+    '''
+    with open(filename, 'w') as f:
+        for item in data:
+            f.write("%s\n" % item)
 
+def load_list(filename):
+    '''Load array of strings using a \n delimiter.
+    '''
+    arr = []
+    with open(filename, 'r') as f:
+        for line in f:
+            arr.append(line.split("\n")[0].strip())
+    
+    return arr
+    
 ########################################## Genomic annotation ##########################################
 ########################################################################################################
 def transcript_to_keep(gene, l_candidates, compare_value):
