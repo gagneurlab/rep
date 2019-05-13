@@ -6,6 +6,7 @@ from collections import OrderedDict
 from sklearn.metrics import r2_score
 from scipy.stats.mstats import gmean
 
+import comet_ml
 import gin
 from gin_train.metrics import RegressionMetrics
 
@@ -79,7 +80,6 @@ def geo_arithm_mean_ratio(y_true, y_pred):
     
        mean(geo_mean(i,j)/arthm(i,j)), 
        where i - true, j - predicted values across samples for a single feature (gene)
-       
     """    
     np_matrix = np.array([y_true + 0.0001, y_pred + 0.0001])
     
@@ -90,8 +90,9 @@ def geo_arithm_mean_ratio(y_true, y_pred):
 
 def metrics_extension(m_temp, y_true, y_pred):
     
-    metrics = {"rsquare":rquare,
-              "geo_arithm_mean_ratio":geo_arithm_mean_ratio}    
+    # metrics = {"rsquare":rquare,
+    #           "geo_arithm_mean_ratio":geo_arithm_mean_ratio}
+    metrics = {"rsquare": rquare}
     for m in metrics:
         m_temp[m] = metrics[m](y_true, y_pred)
     

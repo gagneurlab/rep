@@ -8,11 +8,23 @@ from typing import Union,List
 
 import sklearn as sk
 from sklearn.multioutput import MultiOutputRegressor
-from sklearn.linear_model import LassoLarsCV
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.decomposition import PCA, KernelPCA, IncrementalPCA
 from sklearn.pipeline import Pipeline, FeatureUnion, make_pipeline
 from sklearn.compose import ColumnTransformer
+from sklearn.linear_model import LassoLarsCV, Lasso, LinearRegression, RidgeCV, SGDRegressor, LassoLars, Ridge, HuberRegressor
+from sklearn.metrics import mean_squared_error
+from joblib import Parallel, delayed
+
+import keras
+from keras.layers import Input, Dense, Add, Dropout
+from keras.models import Model, Sequential
+from keras.optimizers import Adam, Adamax, Nadam
+from keras.losses import *
+from keras import regularizers
+from keras.callbacks import EarlyStopping, ProgbarLogger, ReduceLROnPlateau, Callback
+
+import matplotlib.pyplot as plt
 
 import gin
 from gin import config
@@ -20,9 +32,8 @@ from gin import config
 import torch
 import torch.nn as nn
 
-import rep.preprocessing_new as p
-
 torch.manual_seed(7)
+np.random.seed(1)
 
 ####################### Linear Regression / Sklearn ######################
 
@@ -97,9 +108,24 @@ def lasso_model(dim_reducer: Union[PCA, IncrementalPCA, KernelPCA], cv: int, max
     p = Pipeline(steps=[('StandardScaler',StandardScaler()),
                         ('DimReduction', dim_reducer),
                         ('LassoLarsMultiOutputRegressor',
-                   MultiOutputRegressor(LassoLarsCV(cv=cv, max_iter=max_iter, normalize=normalize, n_jobs=n_jobs),
+                   MultiOutputRegressor(LinearRegression(cv=cv, max_iter=max_iter, normalize=normalize, n_jobs=n_jobs),
                                         n_jobs=5))])
     return p
+
+@gin.configurable
+def linear_regression():
+    """Linear Regression Pipeline using:
+        (i) StandardScaler as preprocessing step
+        (ii) Multioutput Regression using LinearRegression
+
+    Returns:
+        Pipeline object
+    """
+
+    p = Pipeline(steps=[('StandardScaler',StandardScaler()),
+                        ('LassoLarsMultiOutputRegressor', MultiOutputRegressor(LinearRegression(n_jobs=10)))])
+    return p
+
 
 @gin.configurable
 def lasso_model_onehot(features_annotation: List[str], dim_reducer: Union[PCA, IncrementalPCA, KernelPCA], cv: int, max_iter: int, normalize: bool,
@@ -145,6 +171,39 @@ def lasso_model_onehot(features_annotation: List[str], dim_reducer: Union[PCA, I
                    MultiOutputRegressor(LassoLarsCV(cv=cv, max_iter=max_iter, normalize=normalize, n_jobs=n_jobs),
                                         n_jobs=5))])
     return p
+
+
+############################################# Autoencoders ################################################
+@gin.configurable
+def pca_autoencoder(n_comp=128):
+    """Reconstruct input gene expression using PCA
+    """
+    pca = PCA(n_components=n_comp)
+   
+    return pca
+    
+# @gin.configurable
+# def linear_ae(code_size = 128):
+#     """Autoencoder with one hidden space
+#     """
+#     # autoencoder layers size
+#     input_size = y_blood_train.shape[1]
+#     code_size = code_size
+#
+#     # optimizer
+#     adam = Adam(lr=0.001, beta_1=0.9, beta_2=0.999, epsilon=0.000001,decay=0.01)
+#
+#     # stop condition
+#     callbacks = [EarlyStopping(monitor='val_loss',min_delta=0.0001, patience=3)]
+#
+#     # model
+#     linear_ae = Sequential()
+#     linear_ae.add(Dense(code_size, input_shape = (input_size,)))
+#     linear_ae.add(Dense(input_size))
+#     linear_ae.compile(optimizer=adam, loss=mean_squared_error)
+#
+#     return linear_ae
+    
 
 
 ####################### Linear Regression / PyTorch ######################

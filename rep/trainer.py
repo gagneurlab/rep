@@ -1,5 +1,7 @@
 import os
 
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
 import logging
 from copy import deepcopy
@@ -207,6 +209,41 @@ class Trainer(object):
         """
         pass
 
+
+@gin.configurable
+class SklearnReconstructUsingPCA(Trainer):
+
+    def __init__(self,
+                 model,
+                 train_dataset,
+                 valid_dataset,
+                 output_dir,
+                 cometml_experiment=None,
+                 wandb_run=None):
+        Trainer.__init__(self, model,
+                         train_dataset,
+                         valid_dataset,
+                         output_dir,
+                         cometml_experiment,
+                         wandb_run)
+
+    def check_model(self):
+        return True
+
+    def fit(self, inputs, targets, epochs=10, batch_size=256, num_workers=8):
+        self.model.fit(inputs)
+
+    def save(self):
+        import pickle
+        with open(self.ckp_file, 'wb') as file:
+            pickle.dump(self.model, file)
+
+    def predict(self, inputs):
+        mu = np.mean(inputs, axis=0)
+        n_comp = len(self.model.components_)
+        Xhat = np.dot(self.model.transform(inputs)[:, :n_comp], self.model.components_[:n_comp, :])
+        Xhat += mu
+        return Xhat
 
 @gin.configurable
 class SklearnPipelineTrainer(Trainer):
