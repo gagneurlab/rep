@@ -31,6 +31,10 @@ from rep.constants import ANNDATA_CST as a
 from rep.constants import GTEX_CST as gcst
 from rep.constants import METADATA_CST as mcst
 
+import gin
+from gin import config
+
+
 # set your log level
 # logging.basicConfig(level=logging.CRITICAL)
 # logger = logging.get#logger('preprocessing')
@@ -81,7 +85,7 @@ class RepAnnData(anndata.AnnData):
     @property
     def samples_names(self):
         return self.obs_names
-
+    
     def set_genes(self, df_genes_description):
         self.var = df_genes_description
         self.var.columns = list(df_genes_description.columns.values)
@@ -128,17 +132,32 @@ class RepAnnData(anndata.AnnData):
 
         return name
 
+
+    @staticmethod
+    def filter_genes(repobj, key='gene_id', values=[]):
+        obj = repobj[:,repobj.genes[key].isin(values)]
+        return RepAnnData(X=np.array(obj.X), genes_var=obj.var, samples_obs=obj.obs)
+
+
+    @staticmethod
+    def filter_samples(repobj, key='To_tissue', values=[]):
+        obj = repobj[repobj.samples[key].isin(values)]
+        return RepAnnData(X=np.array(obj.X), genes_var=obj.var, samples_obs=obj.obs)
+
+
     @staticmethod
     def read_h5ad(filename, backed=None):
         obj = anndata.read_h5ad(filename, backed=backed)
         r = RepAnnData(X=obj.X, genes_var=obj.var, samples_obs=obj.obs)
         return r
 
+
     @staticmethod
     def read_csv(abs_path, delimiter=","):
         obj = anndata.read_csv(abs_path, delimiter=delimiter)
         r = RepAnnData(X=obj.X, genes_var=obj.var, samples_obs=obj.obs)
         return r
+
 
 
 ########################################## I/O #########################################################
@@ -204,6 +223,7 @@ def save_list(filename, data):
         for item in data:
             f.write("%s\n" % item)
 
+@gin.configurable
 def load_list(filename):
     '''Load array of strings using a \n delimiter.
     '''

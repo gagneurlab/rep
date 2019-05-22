@@ -106,10 +106,27 @@ def read_decompress(file):
 
 
 @gin.configurable
-def rep_blood_expression(x_inputs_h5, y_targets_h5, label=None):
+def rep_blood_expression(x_inputs_h5, y_targets_h5, label=None, gene_list=None, to_tissue=None, from_tissue=None):
 
     x_inputs = p.RepAnnData.read_h5ad(x_inputs_h5)
     y_targets = p.RepAnnData.read_h5ad(y_targets_h5)
+
+
+    # filter the genes on which we would like to train/predict
+    if gene_list is not None:
+        x_inputs = p.RepAnnData.filter_genes(x_inputs, key='gene_id', values=gene_list)
+        y_targets = p.RepAnnData.filter_genes(y_targets, key='gene_id', values=gene_list)
+
+    # filter to_tissue
+    if to_tissue is not None:
+        x_inputs = p.RepAnnData.filter_samples(x_inputs, key='To_tissue', values=to_tissue)
+        y_targets = p.RepAnnData.filter_samples(y_targets, key='To_tissue', values=to_tissue)
+
+    # filter to_tissue
+    if from_tissue is not None:
+        x_inputs = p.RepAnnData.filter_samples(x_inputs, key='From_tissue', values=from_tissue)
+        y_targets = p.RepAnnData.filter_samples(y_targets, key='From_tissue', values=from_tissue)
+
 
     # keep X and samples description
     x_train_all = x_inputs[x_inputs.samples['Type'] == 'train']
@@ -146,7 +163,7 @@ def rep_blood_expression(x_inputs_h5, y_targets_h5, label=None):
 
 
 @gin.configurable
-def rep_blood2blood_expression(x_inputs_h5, label=None):
+def rep_blood2blood_expression(x_inputs_h5, label=None, gene_list=None):
     
     x_inputs = p.RepAnnData.read_h5ad(x_inputs_h5)
 

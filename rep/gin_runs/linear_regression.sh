@@ -1,9 +1,9 @@
 #!/bin/sh
 
-config_gin="linear_regression.gin"
+config_gin="linear_regression_pca.gin"
 outdir="/s/project/rep/processed/training_results/linear_regression/"
-declare -a pca_comp=(10 20 50 100 200)
-
+#declare -a pca_comp=(10 20 50 100 200)
+declare -a pca_comp=(50 200)
 for p  in "${pca_comp[@]}"
 do
 	# description
@@ -25,9 +25,9 @@ do
 	echo "#SBATCH --mem-per-cpu=10000" >> $file
 	echo "#SBATCH --auks=no" >> $file
 	echo "#SBATCH --priority=medium" >> $file
-	echo "gt -w $project --run-id ${description} --gin-bindings lasso_model.n_componets=$p $config_gin $outdir" >> $file
-	
-	rm -rf "${outdir}/${description}"  
+	echo "gt -w $project --run-id ${description} --gin-bindings pca_train.n_components=$p $config_gin $outdir" >> $file
 		
+	rm -rf "${outdir}/${description}"  
+	chmod 755 $file	
 	sbatch $file
 done

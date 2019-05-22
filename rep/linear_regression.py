@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import h5py
+from anndata import AnnData
 
 from sklearn.metrics import *
 from sklearn.multioutput import MultiOutputRegressor
@@ -20,6 +21,10 @@ from sklearn.pipeline import Pipeline
 from scipy.stats import pearsonr, spearmanr
 
 from rep import evaluate as e
+import rep.preprocessing_new as prep
+import rep.datasets as d
+import rep.models as m
+from anndata import AnnData
 
 class Linear_Regression():
     
@@ -165,7 +170,217 @@ class FeatureReduction():
             Xs_pca = pca.transform(self.x)
         
         return (Xs_pca,pca)
+
+
+
+################################ auxiliary methods
+
+def prepare_linear_regression_input(tissue, n_comp_indiv_effect=25, n_comp_gene_effect=25, gene_list=None):
+
+    # Step 1. load data
+
+    path = "/s/project/rep/"
+    # path = "/home/mada/Uni/Masterthesis/online_repo/rep/data/"
+    y_targets_h5 = path + "processed/gtex/input_data/Y_targets_pc_onlyblood_log_tpm.h5"
+    x_inputs_h5 = path + "processed/gtex/input_data/X_inputs_pc_onlyblood_log_tpm.h5"
+    train_dataset, valid_dataset = d.rep_blood_expression(x_inputs_h5, y_targets_h5, gene_list=gene_list, to_tissue=[tissue], from_tissue=['Whole Blood'])
+
+
+    metadata_samples_train, metadata_samples_valid = train_dataset.metadata, valid_dataset.metadata
+    x_train, y_train = train_dataset.inputs, train_dataset.targets
+    x_valid, y_valid = valid_dataset.inputs, valid_dataset.targets
+
+    # samples train and valid - use the blood samples to compute PCA
+    samples_blood_train_all = metadata_samples_train['From_sample'].tolist()
+    samples_blood_valid_all = metadata_samples_valid['From_sample'].tolist()
+
+
+    # load gtex data - individual effect (all blood samples)
+    features_file = path + "processed/gtex/recount/recount_gtex_norm_tmp.h5ad"
+    gtex = prep.RepAnnData.read_h5ad(features_file)
+    gtex_filtered = gtex[gtex.samples.index.isin(samples_blood_valid_all + samples_blood_train_all)]
     
+        
+    print(np.isnan(np.array(gtex_filtered.X)))
+
+
+    # load gtex data - gene effect (all samples all tissues - only individuals in the training set)
+    features_file = path + "processed/gtex/recount/recount_gtex_norm_tmp.h5ad"
+    train_individuals_file = path + "processed/gtex/recount/train_individuals.txt"
+    train_individuals = prep.read_csv_one_column(train_individuals_file)
+
+    gtex_raw = prep.RepAnnData.read_h5ad(features_file)
+    gtex_raw_train = gtex_raw[gtex_raw.samples['Individual'].isin(train_individuals)]
+ 
+
+    # Step 2. compute gene effect (Q) and individual effect (P)
+
+    Q = pca_gene_effect(gtex_raw_train, n_comp=n_comp_gene_effect, gene_list=gene_list)
+
+    P_blood_all = pca_individual_effect(gtex_filtered, n_comp=n_comp_indiv_effect)
+    P_train_unsorted = P_blood_all[P_blood_all.obs.index.isin(samples_blood_train_all)]
+    P_valid_unsorted = P_blood_all[P_blood_all.obs.index.isin(samples_blood_valid_all)]
+
+
+
+    # 3. Filter data by tissue
+
+    (y_blood_train, y_tissue_train, meta_train), (y_blood_valid, y_tissue_valid, meta_valid) = get_linear_regression_data(tissue,
+                                    metadata_samples_train,
+                                    metadata_samples_valid,
+                                    x_train,
+                                    y_train,
+                                    x_valid,
+                                    y_valid)
+
+    # sort PCA to match the input data
+    P_train = sort_by_index(P_train_unsorted, samples_blood_train_all)
+    P_valid = sort_by_index(P_valid_unsorted, samples_blood_valid_all)
+
+
+    n_indiv_train, n_genes_train = y_blood_train.shape
+    n_indiv_valid, n_genes_valid = y_blood_valid.shape
+
+    # replace inf values if exists
+
+    return (y_blood_train, y_tissue_train, meta_train, P_train,
+            Q.values.astype(np.float32), n_genes_train, n_indiv_train), \
+           (y_blood_valid, y_tissue_valid, meta_valid, P_valid,
+            Q.values.astype(np.float32), n_genes_valid, n_indiv_valid)
+
+
+def sort_by_individual(anndata, sorter_list, column):
+    df = pd.DataFrame(anndata.X, index=anndata.obs.index.tolist())
+    df = pd.concat([df, anndata.obs], axis=1, join_axes=[df.index])
+
+    # keep only one entry
+    already_visited = []
+    to_keep = []
+
+    for i in range(df.shape[0]):
+        indiv = df[column].iloc[i]
+        if indiv in sorter_list and indiv not in already_visited:
+            to_keep.append(i)
+            already_visited.append(indiv)
+
+    df = df.iloc[to_keep, :]
+
+    df.sort_values([column], ascending=[sorter_list], inplace=True)
+
+    anndata_new = AnnData(X=df.iloc[:, :anndata.X.shape[1]], obs=df.iloc[:, anndata.X.shape[1]:], var=anndata.var)
+    anndata_new.obs = df.iloc[:, anndata.X.shape[1]:]
+    anndata_new.var = anndata.var
+
+    # sort matrix according to index
+    return anndata_new
+
+
+def sort_by_index(anndata, sorter_list):
+
+    # sort matrix according to index (insert duplicates if necessary - some individuals have twice sequenced some tissues)
+    df = pd.DataFrame(columns=anndata.var.index.tolist())
+    for i, sample_id in enumerate(sorter_list):
+        df.loc[i] = anndata[anndata.obs.index == sample_id].X.flatten()
+
+    return df.values
+
+
+
+def pca_individual_effect(gtex, n_comp=25, tissue='Whole Blood', pca_type=PCA):
+    '''Compute PCA - individual effect
+
+    Args:
+        gtex:
+        n_comp:
+        tissue:
+        pca_type:
+
+    Returns:
+
+    '''
+    slice_blood = gtex[gtex.obs['Tissue'] == tissue]
+    metadata = slice_blood.obs
+    features = slice_blood.X
+    if features.shape[0] >= n_comp:
+        features_centered = StandardScaler().fit_transform(features)
+        pca = pca_type(n_components=n_comp)
+        features_pca = pca.fit_transform(features_centered)
+
+    # wrap PCA into AnndataObject
+    return AnnData(X=features_pca, obs=metadata)
+
+
+# compute PCA - gene effect
+def pca_gene_effect(gtex, n_comp = 25, pca_type = PCA, gene_list=None):
+    metadata = gtex.var
+    features = gtex.X.transpose()
+
+    if features.shape[0] >= n_comp:
+        features_centered  = StandardScaler().fit_transform(features)
+        pca = pca_type(n_components=n_comp)
+        features_pca = pca.fit_transform(features_centered)
+    gene_effect = pd.DataFrame(features_pca, index=metadata['gene_id'])
+
+    if gene_list is not None:
+        return gene_effect[gene_effect.index.isin(gene_list)]
+    return gene_effect
+
+
+def get_linear_regression_data(tissue, mt_train, mt_valid, x_train, y_train, x_valid, y_valid):
+
+    # Filter by tissue
+    index_train = np.where(mt_train['To_tissue'] == tissue)[0]
+    index_valid = np.where(mt_valid['To_tissue'] == tissue)[0]
+
+    xs_train = x_train[index_train, :]
+    xs_valid = x_valid[index_valid, :]
+
+    ys_train = y_train[index_train, :]
+    ys_valid = y_valid[index_valid, :]
+
+    mt_train_filtered = mt_train.iloc[index_train, :]
+    mt_valid_filtered = mt_valid.iloc[index_valid, :]
+
+    #     print(xs_train.shape, mt_train_filtered.shape)
+
+    # unique_indiv_train = mt_train_filtered['Individual'].drop_duplicates().tolist()
+    # visited_train = []
+    # to_keep_train = []
+    #
+    # for i in range(xs_train.shape[0]):
+    #     indiv = mt_train_filtered['Individual'].iloc[i]
+    #     if indiv not in visited_train:
+    #         to_keep_train.append(i)
+    #         visited_train.append(indiv)
+    # index_train = to_keep_train
+    #
+    # unique_indiv_valid = mt_valid_filtered['Individual'].drop_duplicates().tolist()
+    # visited_valid = []
+    # to_keep_valid = []
+    # for i in range(xs_valid.shape[0]):
+    #     indiv = mt_valid_filtered['Individual'].iloc[i]
+    #     if indiv not in visited_valid:
+    #         to_keep_valid.append(i)
+    #         visited_valid.append(indiv)
+    # index_valid = to_keep_valid
+    #
+    # xs_train = xs_train[index_train, :]
+    # xs_valid = xs_valid[index_valid, :]
+    # ys_train = ys_train[index_train, :]
+    # ys_valid = ys_valid[index_valid, :]
+
+    xs_train = xs_train.astype(np.float32) + 0.00001
+    ys_train = ys_train.astype(np.float32) + 0.00001
+
+    xs_valid = xs_valid.astype(np.float32) + 0.00001
+    ys_valid = ys_valid.astype(np.float32) + 0.00001
+
+    # mt_train_filtered = mt_train_filtered.iloc[index_train, :]
+    # mt_valid_filtered = mt_valid_filtered.iloc[index_valid, :]
+
+    return (xs_train, ys_train, mt_train_filtered), (xs_valid, ys_valid, mt_valid_filtered)
+
+
 
     
 # # log-normalize the count data

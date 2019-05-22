@@ -108,7 +108,7 @@ def lasso_model(dim_reducer: Union[PCA, IncrementalPCA, KernelPCA], cv: int, max
     p = Pipeline(steps=[('StandardScaler',StandardScaler()),
                         ('DimReduction', dim_reducer),
                         ('LassoLarsMultiOutputRegressor',
-                   MultiOutputRegressor(LinearRegression(cv=cv, max_iter=max_iter, normalize=normalize, n_jobs=n_jobs),
+                   MultiOutputRegressor(LassoLarsCV(cv=cv, max_iter=max_iter, normalize=normalize, n_jobs=n_jobs),
                                         n_jobs=5))])
     return p
 

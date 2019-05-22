@@ -1,0 +1,26 @@
+import rep.models
+import rep.datasets
+import rep.metrics
+import rep.trainer
+
+# ==================================================================
+# model.gin
+# --------------------------------------------
+# model
+train.trainer_cls = @SklearnPipelineTrainer
+train.model = @linear_regression()
+
+
+# ==================================================================
+# problem.gin
+# --------------------------------------------
+# data
+train.data = @rep_blood_expression()  # use the default train and valid chromosomes
+rep_blood_expression.y_targets_h5 = "/s/project/rep/processed/gtex/input_data/Y_targets_pc_onlyblood.h5"
+rep_blood_expression.x_inputs_h5 = "/s/project/rep/processed/gtex/input_data/X_inputs_pc_onlyblood.h5"
+rep_blood_expression.label = "lin_reg all (pc_blood)"
+
+# --------------------------------------------
+# evaluation
+train.eval_metric = @rep_metric
+train.eval_train = True
