@@ -110,3 +110,7 @@ src/chipseq/outputs*
 /.pytest_cache/v/cache/lastfailed
 
 src/dnase/benchmark
+
+# intellij
+.idea
+
