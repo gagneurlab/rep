@@ -1,22 +1,18 @@
 #!/bin/sh
 
-config_gin="linear_regression.gin"
+config_gin="linear_regression_pca.gin"
 outdir="/s/project/rep/processed/training_results/linear_regression/"
-declare -a pca_comp=(10 20 50 100 200 1000)
-
+#declare -a pca_comp=(10 20 50 100 200)
+declare -a pca_comp=(50 200)
 for p  in "${pca_comp[@]}"
 do
-	# set param
-	sed -i -e 's/n_components = 10/n_components = '$p'/g' $config_gin
+	# description
 	file="job_lin_${p}.sh"
 	name="lin_pca${p}"
 	project="tum/rep"
-	description="lasso_model,pca_${p},only_blood,20iter"
+	description="$(date +%F_%H-%M-%S)_lasso_model_pca_${p}_only_blood"
 	
-	# reset content
-	touch $file
-	> $file
-	
+	# slurm config
 	echo "#!/bin/sh" >> $file
 	echo "" >> $file
 	echo "#SBATCH --job-name=${name}" >> $file
@@ -29,9 +25,9 @@ do
 	echo "#SBATCH --mem-per-cpu=10000" >> $file
 	echo "#SBATCH --auks=no" >> $file
 	echo "#SBATCH --priority=medium" >> $file
-	echo "gt -w $project --run-id ${description} $config_gin $outdir" >> $file
-	
+	echo "gt -w $project --run-id ${description} --gin-bindings pca_train.n_components=$p $config_gin $outdir" >> $file
+		
+	rm -rf "${outdir}/${description}"  
+	chmod 755 $file	
 	sbatch $file
-	# reset param
-	sed -i -e 's/n_components = '${p}'/n_components = 10/g' $config_gin
 done

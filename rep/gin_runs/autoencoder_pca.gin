@@ -1,0 +1,25 @@
+import rep.models
+import rep.datasets
+import rep.metrics
+import rep.trainer
+
+# ==================================================================
+# model.gin
+# --------------------------------------------
+# model
+train.trainer_cls = @SklearnReconstructUsingPCA
+train.model = @pca_autoencoder()
+pca_autoencoder.n_comp = 128
+
+# ==================================================================
+# problem.gin
+# --------------------------------------------
+# data
+train.data = @rep_blood2blood_expression()  # use the default train and valid chromosomes
+rep_blood2blood_expression.x_inputs_h5 = "/s/project/rep/processed/gtex/input_data/X_inputs_pc_onlyblood.h5"
+rep_blood2blood_expression.label = "recover blood from pca"
+
+# --------------------------------------------
+# evaluation
+train.eval_metric = @rep_metric
+train.eval_train = True

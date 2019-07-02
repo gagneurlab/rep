@@ -5,6 +5,7 @@ channels:
   - defaults
   - conda-forge
 dependencies:
+  - kipoi
   - biopython=1.72=py36h04863e7_0
   - blas=1.0=mkl
   - h5py=2.8.0=py36h989c5e5_3
@@ -215,4 +216,3 @@ dependencies:
     - werkzeug==0.14.1
     - whichcraft==0.5.2
     - wurlitzer==1.0.2
-

@@ -7,6 +7,7 @@ from pathlib import Path
 
 # config
 # exclude = ['src/chipseq/', 'src/chipexo']
+exclude = []
 TARGET_DIR = 'data/www/code/'
 # --------
 
@@ -31,5 +32,5 @@ rule compile_ipynb:
         f = os.path.join(TARGET_DIR, "{path}.html")
     shell:
         """
-        jupyter nbconvert --to html {input.f} --output {TARGET_DIR}/{wildcards.path}
+        jupyter nbconvert --to html '{input.f}' --output-dir ./ --output '{TARGET_DIR}/{wildcards.path}'
         """

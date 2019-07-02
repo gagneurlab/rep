@@ -1,5 +1,7 @@
 import os
 
+import numpy as np
+import pandas as pd
 from tqdm import tqdm
 import logging
 from copy import deepcopy
@@ -76,27 +78,7 @@ class Trainer(object):
         self.evaluation_path = f"{self.output_dir}/evaluation.valid.json"
     
     
-    def read_decompress(self, file):
-        """Read and decompress metadata
-        
-        Args:
-            file (str): file name which contain a valid serialized json
-                        dict_keys(['gene_metadata', 'patient_tissue_metadata'])
-                        value of the key should be dataframes
-        Returns:
-            uncompress json format of the metadata
-        """
-        
-        with open(file,'r') as json_file:  
-            data = json.load(json_file)
-            
-        # decompress dataframes:
-        for key in data:
-            data[key] = data[key].read_json()
-        
-        return data
-        
-    
+
     ##########################################################################
     ###########################    Train   ###################################
     ##########################################################################
@@ -204,8 +186,9 @@ class Trainer(object):
             del lpreds
             del llabels
             
-            metric_res[data.dataset_name] = eval_metric(labels, preds, tissue_specific_metadata = data.metadata)
-                
+            # metric_res[data.dataset_name] = eval_metric(labels, preds, tissue_specific_metadata = data.metadata)
+            metric_res[data.dataset_name] = eval_metric(labels, preds, tissue_specific_metadata= None)
+
         if save:
             write_json(metric_res, self.evaluation_path, indent=2)
             logger.info("Saved metrics to {}".format(self.evaluation_path))
@@ -228,6 +211,41 @@ class Trainer(object):
 
 
 @gin.configurable
+class SklearnReconstructUsingPCA(Trainer):
+
+    def __init__(self,
+                 model,
+                 train_dataset,
+                 valid_dataset,
+                 output_dir,
+                 cometml_experiment=None,
+                 wandb_run=None):
+        Trainer.__init__(self, model,
+                         train_dataset,
+                         valid_dataset,
+                         output_dir,
+                         cometml_experiment,
+                         wandb_run)
+
+    def check_model(self):
+        return True
+
+    def fit(self, inputs, targets, epochs=10, batch_size=256, num_workers=8):
+        self.model.fit(inputs)
+
+    def save(self):
+        import pickle
+        with open(self.ckp_file, 'wb') as file:
+            pickle.dump(self.model, file)
+
+    def predict(self, inputs):
+        mu = np.mean(inputs, axis=0)
+        n_comp = len(self.model.components_)
+        Xhat = np.dot(self.model.transform(inputs)[:, :n_comp], self.model.components_[:n_comp, :])
+        Xhat += mu
+        return Xhat
+
+@gin.configurable
 class SklearnPipelineTrainer(Trainer):
 
     """Simple Scikit model trainer
@@ -240,7 +258,8 @@ class SklearnPipelineTrainer(Trainer):
                  output_dir,
                  cometml_experiment=None,
                  wandb_run=None):
-        super(SklearnPipelineTrainer,self).__init__(model,
+
+        Trainer.__init__(self,model,
                  train_dataset,
                  valid_dataset,
                  output_dir,
@@ -334,7 +353,7 @@ class PyTorchTrainer(Trainer):
             for i, data in enumerate(trainloader, 0):
                 inp, labels = data    
                 inp, labels = torch.autograd.Variable(inp), torch.autograd.Variable(labels)
-#                 print('Batch idx {}, data shape {}, target shape {}'.format(i, inp.shape, 
+#                 print('Batch idx {}, data shape {}, target shape {}'.format(i, inp.shape,
 #                                                                             lab.shape))
                 self.fit_minibatch(inp, labels)
                 
