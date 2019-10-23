@@ -4,6 +4,10 @@ library(data.table)
 library(OUTRIDER)
 library(stringr)
 
+rep.row<-function(x,n){
+   matrix(rep(x,each=n),nrow=n)
+}
+
 #source_dir = path.expand("/s/project/gtex_genetic_diagnosis/processed_data/v29/counts")
 #target_dir = path.expand("~/tmp/counts/")
 
@@ -36,33 +40,57 @@ data = lapply(files, function (x) {
 })
 
 observations = rbindlist(
-  lapply(data, function(x) as.data.table(colData(x))),
+  lapply(data, function(ods) as.data.table(colData(ods))),
   use.names=TRUE
 )
 fwrite(observations, file.path(target_dir, "observations.csv"))
 rm(observations)
 
 counts = rbindlist(
-  lapply(data, function(x) as.data.table(t(assays(x)$counts))),
+  lapply(data, function(ods) as.data.table(t(assays(ods)$counts))),
   use.names=TRUE,
   fill=TRUE
 )
 fwrite(counts, file.path(target_dir, "counts.csv"))
 
 l2fc = rbindlist(
-  lapply(data, function(x) as.data.table(t(assays(x)$l2fc))),
+  lapply(data, function(ods) as.data.table(t(assays(ods)$l2fc))),
   use.names=TRUE,
   fill=TRUE
 )
 fwrite(l2fc, file.path(target_dir, "l2fc.csv"))
 
-for (ods in data){
-  w_encoder = metadata(ods)[["E"]]
-  w_decoder = metadata(ods)[["D"]]
-  fwrite(w_encoder, file.path(target_dir, paste0(colData(ods)$SMTSD[[1]], ".w_encoder.csv"))
-  fwrite(w_decoder, file.path(target_dir, paste0(colData(ods)$SMTSD[[1]], ".w_decoder.csv"))
-}
+mu = rbindlist(
+  lapply(data, function(ods) as.data.table(t(normalizationFactors(ods)))),
+  use.names=TRUE,
+  fill=TRUE
+)
+fwrite(mu, file.path(target_dir, "mu.csv"))
 
+theta = rbindlist(
+  lapply(data, function(ods) {
+    theta = rep.row(mcols(ods)$theta, length(colnames(ods)))
+    colnames(theta) = rownames(ods)
+    theta = as.data.table(theta)
+  }),
+  use.names=TRUE,
+  fill=TRUE
+)
+fwrite(theta, file.path(target_dir, "theta.csv"))
+
+pval = rbindlist(
+  lapply(data, function(ods) as.data.table(t(pValue(ods)))),
+  use.names=TRUE,
+  fill=TRUE
+)
+fwrite(pval, file.path(target_dir, "pval.csv"))
+
+padj = rbindlist(
+  lapply(data, function(ods) as.data.table(t(padj(ods)))),
+  use.names=TRUE,
+  fill=TRUE
+)
+fwrite(padj, file.path(target_dir, "padj.csv"))
 
 
 gene_ids = colnames(counts)
@@ -71,9 +99,9 @@ rm(counts)
 features = rbindlist(
   lapply(
     data,
-    function(x) {
-      f = as.data.table(rowData(x))
-      f$gene_id = rownames(x)
+    function(ods) {
+      f = as.data.table(rowData(ods))
+      f$gene_id = rownames(ods)
 
       f[, c("gene_id", "gene_symbol", "basepairs")]
     }

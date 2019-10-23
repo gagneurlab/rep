@@ -454,7 +454,8 @@ def raw_counts2tpm(annobj, annotation):
 
     # array with gene_len
     transcript_len = np.zeros(len(recount_genes))
-    for i, gene in enumerate(recount_genes): transcript_len[i] = annotation[gene][ANNO_EXONIC_LENGHT] / 1000.0
+    for i, gene in enumerate(recount_genes):
+        transcript_len[i] = annotation[gene][ANNO_EXONIC_LENGHT] / 1000.0
 
     # compute per sample
     for i in range(0, annobj.X.shape[0]):
