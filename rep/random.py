@@ -163,15 +163,15 @@ class NegativeBinomial:
 
     def cdf(self, X):
         r = self.r
-        p = self.p
+        log_1p = self.log_1p
 
         # broadcasting
-        if xr and isinstance(p, xr.DataArray) and isinstance(r, xr.DataArray) and isinstance(X, xr.DataArray):
-            mu, r, X = xr.align(p, r, X)
+        if xr and isinstance(log_1p, xr.DataArray) and isinstance(r, xr.DataArray) and isinstance(X, xr.DataArray):
+            log_1p, r, X = xr.align(log_1p, r, X)
         else:
-            mu, r, X = np.broadcast_arrays(p, r, X)
+            log_1p, r, X = np.broadcast_arrays(log_1p, r, X)
 
-        return betainc(r, 1. + X, 1. - p)
+        return betainc(r, 1. + X, np.exp(log_1p))
 
 
 class Normal:
