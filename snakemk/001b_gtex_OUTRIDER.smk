@@ -12,37 +12,37 @@ CACHE_DATA_DIR = "cache/gtex/OUTRIDER"
 PROCESSED_DATA_DIR = "processed/gtex/OUTRIDER"
 
 
-def convert_to_h5ad(observations_file, features_file, values_file, output):
-    import anndata as ad
-    import pandas as pd
-
-    print("Reading data...")
-    observations = pd.read_csv(observations_file)
-    # rename some columns
-    observations.rename(
-        columns=dict(
-            SAMPID="Sample_Name",
-            subjectID="individual",
-            SMTS="tissue",
-            SMTSD="subtissue",
-        ),
-        inplace=True
-    )
-    observations.set_index("Sample_Name", inplace=True)
-
-    features = pd.read_csv(features_file)
-    features.set_index("gene_id", inplace=True)
-
-    values = np.asarray(pd.read_csv(values_file))
-
-    adata = ad.AnnData(
-        values,
-        obs=observations,
-        var=features
-    )
-
-    print("writing data to '%s'..." % output)
-    adata.write_h5ad(output)
+# def convert_to_h5ad(observations_file, features_file, values_file, output):
+#     import anndata as ad
+#     import pandas as pd
+#
+#     print("Reading data...")
+#     observations = pd.read_csv(observations_file)
+#     # rename some columns
+#     observations.rename(
+#         columns=dict(
+#             SAMPID="Sample_Name",
+#             subjectID="individual",
+#             SMTS="tissue",
+#             SMTSD="subtissue",
+#         ),
+#         inplace=True
+#     )
+#     observations.set_index("Sample_Name", inplace=True)
+#
+#     features = pd.read_csv(features_file)
+#     features.set_index("gene_id", inplace=True)
+#
+#     values = np.asarray(pd.read_csv(values_file))
+#
+#     adata = ad.AnnData(
+#         values,
+#         obs=observations,
+#         var=features
+#     )
+#
+#     print("writing data to '%s'..." % output)
+#     adata.write_h5ad(output)
 
 
 def convert_to_xarray(observations_file, features_file, values_file, output):
@@ -82,111 +82,200 @@ rule _001b_gtex_OUTRIDER:
     input:
          RAW_DATA_DIR
     output:
-          os.path.join(CACHE_DATA_DIR, "observations.csv"),
-          os.path.join(CACHE_DATA_DIR, "features.csv"),
-          os.path.join(CACHE_DATA_DIR, "counts.csv"),
-          os.path.join(CACHE_DATA_DIR, "l2fc.csv"),
-          os.path.join(CACHE_DATA_DIR, "mu.csv"),
-          os.path.join(CACHE_DATA_DIR, "theta.csv"),
-          os.path.join(CACHE_DATA_DIR, "pval.csv"),
-          os.path.join(CACHE_DATA_DIR, "padj.csv"),
+          os.path.join(CACHE_DATA_DIR, "observations.parquet"),
+          os.path.join(CACHE_DATA_DIR, "features.parquet"),
+          os.path.join(CACHE_DATA_DIR, "counts.parquet"),
+          os.path.join(CACHE_DATA_DIR, "l2fc.parquet"),
+          os.path.join(CACHE_DATA_DIR, "mu.parquet"),
+          os.path.join(CACHE_DATA_DIR, "theta.parquet"),
+          os.path.join(CACHE_DATA_DIR, "log_cdf.parquet"),
+          os.path.join(CACHE_DATA_DIR, "zscore.parquet"),
+          os.path.join(CACHE_DATA_DIR, "pval.parquet"),
+          os.path.join(CACHE_DATA_DIR, "padj.parquet"),
     params:
-          output_dir=CACHE_DATA_DIR
+          output_dir=CACHE_DATA_DIR,
+          alpha_cutoff=0.05
     shell:
-         "Rscript %s/scripts/001_gtex_OUTRIDER.R {input} {params.output_dir}" % SNAKEMAKE_DIR
+         "Rscript %s/scripts/001_gtex_OUTRIDER.R {input} {params.output_dir} {params.alpha_cutoff}" % SNAKEMAKE_DIR
 
-rule _001b_convert_to_h5ad:
-    input:
-         observations=os.path.join(CACHE_DATA_DIR, "observations.csv"),
-         features=os.path.join(CACHE_DATA_DIR, "features.csv"),
-         target=os.path.join(CACHE_DATA_DIR, "{target}.csv"),
-         #l2fc = os.path.join(CACHE_DATA_DIR, "l2fc.csv"),
-         #mu = os.path.join(CACHE_DATA_DIR, "mu.csv"),
-         #theta = os.path.join(CACHE_DATA_DIR, "theta.csv"),
-    output:
-          os.path.join(PROCESSED_DATA_DIR, "{target}.h5ad")
-          #os.path.join(PROCESSED_DATA_DIR, "l2fc.h5ad")
-          #os.path.join(PROCESSED_DATA_DIR, "mu.h5ad")
-          #os.path.join(PROCESSED_DATA_DIR, "theta.h5ad")
-    #     wildcard_constraints:
-    #         target="counts|l2fc"
-    run:
-        convert_to_h5ad(
-            input.observations,
-            input.features,
-            input.target,
-            output[0]
-        )
+# rule _001b_convert_to_h5ad:
+#     input:
+#          observations=os.path.join(CACHE_DATA_DIR, "observations.csv.gz"),
+#          features=os.path.join(CACHE_DATA_DIR, "features.csv.gz"),
+#          target=os.path.join(CACHE_DATA_DIR, "{target}.csv.gz"),
+#          #l2fc = os.path.join(CACHE_DATA_DIR, "l2fc.csv.gz"),
+#          #mu = os.path.join(CACHE_DATA_DIR, "mu.csv.gz"),
+#          #theta = os.path.join(CACHE_DATA_DIR, "theta.csv.gz"),
+#     output:
+#           os.path.join(PROCESSED_DATA_DIR, "{target}.h5ad")
+#           #os.path.join(PROCESSED_DATA_DIR, "l2fc.h5ad")
+#           #os.path.join(PROCESSED_DATA_DIR, "mu.h5ad")
+#           #os.path.join(PROCESSED_DATA_DIR, "theta.h5ad")
+#     #     wildcard_constraints:
+#     #         target="counts|l2fc"
+#     run:
+#         convert_to_h5ad(
+#             input.observations,
+#             input.features,
+#             input.target,
+#             output[0]
+#         )
 
 rule _001b_convert_to_xarray:
     input:
-         observations=os.path.join(CACHE_DATA_DIR, "observations.csv"),
-         features=os.path.join(CACHE_DATA_DIR, "features.csv"),
-         counts=os.path.join(CACHE_DATA_DIR, "counts.csv"),
-         l2fc = os.path.join(CACHE_DATA_DIR, "l2fc.csv"),
-         mu = os.path.join(CACHE_DATA_DIR, "mu.csv"),
-         theta = os.path.join(CACHE_DATA_DIR, "theta.csv"),
+         observations=os.path.join(CACHE_DATA_DIR, "observations.parquet"),
+         features=os.path.join(CACHE_DATA_DIR, "features.parquet"),
+         counts=os.path.join(CACHE_DATA_DIR, "counts.parquet"),
+         l2fc=os.path.join(CACHE_DATA_DIR, "l2fc.parquet"),
+         mu=os.path.join(CACHE_DATA_DIR, "mu.parquet"),
+         theta=os.path.join(CACHE_DATA_DIR, "theta.parquet"),
+         log_cdf=os.path.join(CACHE_DATA_DIR, "log_cdf.parquet"),
+         zscore=os.path.join(CACHE_DATA_DIR, "zscore.parquet"),
+         pval=os.path.join(CACHE_DATA_DIR, "pval.parquet"),
+         padj=os.path.join(CACHE_DATA_DIR, "padj.parquet"),
     output:
-          directory(os.path.join(PROCESSED_DATA_DIR, "gtex.zarr"))
-    #     wildcard_constraints:
-    #         target="counts|l2fc"
+          directory(os.path.join(PROCESSED_DATA_DIR, "gtex_unstacked.zarr"))
+          #     wildcard_constraints:
+          #         target="counts|l2fc"
     run:
         print("Reading data...")
 
-        observations = pd.read_csv(input.observations)
-        # rename some columns
-        observations.rename(
-            columns=dict(
-                SAMPID="observations",
-                subjectID="individual",
-                SMTS="tissue",
-                SMTSD="subtissue",
-            ),
-            inplace=True
-        )
+        observations = pd.read_parquet(input["observations"])
+        ## rename some columns
+        #observations = observations.rename(
+        #    columns=dict(
+        #        SAMPID="sample_id",
+        #        # subjectID="individual",
+        #        SMTS="tissue",
+        #        SMTSD="subtissue",
+        #    ),
+        #)
+        observations["individual"] = observations["Sample_Name"].str.split("-").apply(lambda s: "-".join(s[:2]))
+        observations = observations.set_index(["subtissue", "individual"])
 
-        features = pd.read_csv(input.features)
+        features = pd.read_parquet(input["features"])
         # rename some columns
-        features.rename(
+        features = features.rename(
             columns=dict(
-                gene_id="genes",
+                gene_id="gene",
             ),
-            inplace=True
-        )
+        ).set_index("gene")
 
-        # counts = np.asarray(pd.read_csv(input.counts))
-        # l2fc = np.asarray(pd.read_csv(input.l2fc))
-        # mu = np.asarray(pd.read_csv(input.mu))
-        # theta = np.asarray(pd.read_csv(input.theta))
-        counts = ddf.read_csv(input.counts, sample=2000000, dtype="float32").to_dask_array(lengths=True)
-        l2fc = ddf.read_csv(input.l2fc, sample=2000000, dtype="float32").to_dask_array(lengths=True)
-        mu = ddf.read_csv(input.mu, sample=2000000, dtype="float32").to_dask_array(lengths=True)
-        theta = ddf.read_csv(input.theta, sample=2000000, dtype="float32").to_dask_array(lengths=True)
+        # dense matrices
+        counts = da.from_array(np.asarray(pd.read_parquet(input["counts"])), chunks=(1000, 1000))
+        l2fc = da.from_array(np.asarray(pd.read_parquet(input["l2fc"])), chunks=(1000, 1000))
+        mu = da.from_array(np.asarray(pd.read_parquet(input["mu"])), chunks=(1000, 1000))
+        theta = da.from_array(np.asarray(pd.read_parquet(input["theta"])), chunks=(1000, 1000))
+        log_cdf = da.from_array(np.asarray(pd.read_parquet(input["log_cdf"])), chunks=(1000, 1000))
+        zscore = da.from_array(np.asarray(pd.read_parquet(input["zscore"])), chunks=(1000, 1000))
+        pval = da.from_array(np.asarray(pd.read_parquet(input["pval"])), chunks=(1000, 1000))
+        padj = da.from_array(np.asarray(pd.read_parquet(input["padj"])), chunks=(1000, 1000))
+
+        print("reading finished")
+
+        # counts = ddf.read_parquet(input.counts, sample=2000000, dtype="float32").to_dask_array(lengths=True)
+        # l2fc = ddf.read_parquet(input.l2fc, sample=2000000, dtype="float32").to_dask_array(lengths=True)
+        # mu = ddf.read_parquet(input.mu, sample=2000000, dtype="float32").to_dask_array(lengths=True)
+        # theta = ddf.read_parquet(input.theta, sample=2000000, dtype="float32").to_dask_array(lengths=True)
+        # cdf = ddf.read_parquet(input.cdf, sample=2000000, dtype="float32").to_dask_array(lengths=True)
+        # zscore = ddf.read_parquet(input.zscore, sample=2000000, dtype="float32").to_dask_array(lengths=True)
+
+        def cdf_to_categorical(cdf, alpha=0.05):
+            return (cdf > (1 - alpha) / 2).astype("int8") - (cdf < alpha / 2).astype("int8")
+
 
         xrds = xr.Dataset(
             {
-                "counts": (["observations", "genes"], counts),
-                "l2fc": (["observations", "genes"], l2fc),
-                "mu": (["observations", "genes"], mu),
-                "theta": (["observations", "genes"], theta),
+                "counts": (("observations", "gene"), counts),
+                "log_cdf": (("observations", "gene"), log_cdf),
+                "l2fc": (("observations", "gene"), l2fc),
+                "zscore": (("observations", "gene"), zscore),
+                "pval": (("observations", "gene"), pval),
+                "padj": (("observations", "gene"), padj),
             },
             coords={
-                **{k: (["genes",], v) for k, v in features.items()},
-                **{k: (["observations",], v) for k, v in observations.items()},
+                "observations": observations.index,
+                "gene": features.index,
+            }
+        )
+        xrds["cdf"] = np.exp(xrds.log_cdf)
+
+        # xrds = xrds.set_index(observations=["subtissue", "individual"])
+        # xrds = xrds.chunk({})
+
+        alpha = 0.05
+
+        xrds = xrds.unstack("observations").chunk({"subtissue": 1})
+        xrds = xrds.assign(**observations.to_xarray(), **features.to_xarray())
+        xrds = xrds.chunk({"gene": None, "subtissue": 1, "individual": 10})
+
+        xrds = xrds.transpose("subtissue", "individual", "gene")
+
+        with np.errstate(invalid='ignore'):
+            xrds = xrds.assign({
+                "hilo": cdf_to_categorical(xrds.cdf, alpha=alpha),
+                "hilo_padj": ((xrds.padj < alpha).astype("int8") * xr.where(np.exp(xrds.log_cdf) < 0.5, -1, 1)).astype("int8"),
+                "missing": np.isnan(xrds.log_cdf),
+            })
+
+        print("writing zarr output...")
+
+        xrds.to_zarr(
+            output[0],
+            encoding={
+                'counts': dict(dtype='int32'),
+                'hilo': dict(dtype='int8'),
+                'hilo_padj': dict(dtype='int8'),
+#                'SMCENTER': dict(dtype='str'),
+#                'SMPTHNTS': dict(dtype='str'),
+#                'tissue': dict(dtype='str'),
+#                'SMUBRID': dict(dtype='str'),
+#                'SMTSTPTREF': dict(dtype='str'),
+#                'SMNABTCH': dict(dtype='str'),
+#                'SMNABTCHT': dict(dtype='str'),
+#                'SMNABTCHD': dict(dtype='str'),
+#                'SMGEBTCH': dict(dtype='str'),
+#                'SMGEBTCHD': dict(dtype='str'),
+#                'SMGEBTCHT': dict(dtype='str'),
+#                'SMAFRZE': dict(dtype='str'),
+#                'AGE': dict(dtype='str'),
+#                'genes': dict(dtype='str'),
+#                'gene_symbol': dict(dtype='str'),
+#                'sample_name': dict(dtype='str'),
+#                'subtissue': dict(dtype='str'),
+#                'individual': dict(dtype='str'),
+#                'sampleID'                       object
+#                'RNA_ID'                         object
+#                'submitted_subject_id'           object
+#                subtissue                      object
+#                Sample_Name                    object
+#                SRA_Sample                     object
+#                sex                            object
+#                BioSample                      object
+#                Experiment                     object
+#                tissue                         object
+#                RIN                           float64
+#                SMAFRZE                        object
+#                DNA_ID                         object
+#                DNA_ASSAY                      object
+#                TISSUE_CLEAN                   object
+#                DROP_GROUP                     object
+#                COUNT_MODE                     object
+#                PAIRED_END                       bool
+#                COUNT_OVERLAPS                   bool
+#                STRAND                         object
+#                RNA_BAM_FILE                   object
+#                DNA_VCF_FILE                   object
+#                N                               int64
+#                expressedGenes                  int64
+#                unionExpressedGenes             int64
+#                intersectionExpressedGenes      int64
+#                passedFilterGenes               int64
+#                expressedGenesRank              int64
+#                sizeFactor                    float64
+#                thetaCorrection                 int64
+#
             }
         )
 
-        import rep.random as rnd
-        import scipy.stats as scistats
-
-        ppf_func = da.as_gufunc(signature="()->()", output_dtypes=float, vectorize=True)(scistats.norm.ppf)
-
-        cdf = rnd.NegativeBinomial(mean=xrds.mu, r=xrds.theta).cdf(xrds.counts)
-        ppf = xr.apply_ufunc(ppf_func, cdf, dask="allowed")
-
-        xrds["cdf"] = cdf
-        xrds["ppf"] = ppf
-
-        xrds = xrds.chunk({"observations": 10, "genes": 1000})
-
-        xrds.to_zarr(output[0])
+        print("writing zarr output finished")
