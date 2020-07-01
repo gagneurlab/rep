@@ -16,6 +16,7 @@ rule all:
 #         "processed/gtex/OUTRIDER/pval.h5ad",
 #         "processed/gtex/OUTRIDER/padj.h5ad",
          "processed/gtex/OUTRIDER/gtex_unstacked.zarr",
+         "processed/gtex/OUTRIDER_intronic/gtex_unstacked.zarr",
          # basenji
          #"processed/basenji/GRCh38/gtex",
          #"processed/basenji/GRCh38/reference",

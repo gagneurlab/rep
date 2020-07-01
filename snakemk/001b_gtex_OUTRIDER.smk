@@ -7,134 +7,49 @@ import xarray as xr
 
 SNAKEMAKE_DIR = os.path.dirname(workflow.snakefile)
 
-RAW_DATA_DIR = "raw/gtex/OUTRIDER"
-CACHE_DATA_DIR = "cache/gtex/OUTRIDER"
-PROCESSED_DATA_DIR = "processed/gtex/OUTRIDER"
-
-
-# def convert_to_h5ad(observations_file, features_file, values_file, output):
-#     import anndata as ad
-#     import pandas as pd
-#
-#     print("Reading data...")
-#     observations = pd.read_csv(observations_file)
-#     # rename some columns
-#     observations.rename(
-#         columns=dict(
-#             SAMPID="Sample_Name",
-#             subjectID="individual",
-#             SMTS="tissue",
-#             SMTSD="subtissue",
-#         ),
-#         inplace=True
-#     )
-#     observations.set_index("Sample_Name", inplace=True)
-#
-#     features = pd.read_csv(features_file)
-#     features.set_index("gene_id", inplace=True)
-#
-#     values = np.asarray(pd.read_csv(values_file))
-#
-#     adata = ad.AnnData(
-#         values,
-#         obs=observations,
-#         var=features
-#     )
-#
-#     print("writing data to '%s'..." % output)
-#     adata.write_h5ad(output)
-
-
-def convert_to_xarray(observations_file, features_file, values_file, output):
-    import anndata as ad
-    import pandas as pd
-
-    print("Reading data...")
-    observations = ddf.read_csv(observations_file)
-    # rename some columns
-    observations.rename(
-        columns=dict(
-            SAMPID="Sample_Name",
-            subjectID="individual",
-            SMTS="tissue",
-            SMTSD="subtissue",
-        ),
-        inplace=True
-    )
-    observations.set_index("Sample_Name", inplace=True)
-
-    features = ddf.read_csv(features_file)
-    features.set_index("gene_id", inplace=True)
-
-    values = xr.DataArray(ddf.read_csv(values_file, sample=2000000).to_dask_array())
-
-    adata = ad.AnnData(
-        values,
-        obs=observations,
-        var=features
-    )
-
-    print("writing data to '%s'..." % output)
-    adata.write_h5ad(output)
+#RAW_DATA_DIR = "raw/gtex/OUTRIDER"
+#CACHE_DATA_DIR = "cache/gtex/OUTRIDER"
+#PROCESSED_DATA_DIR = "processed/gtex/OUTRIDER"
+RAW_DATA_DIR = "raw"
+CACHE_DATA_DIR = "cache"
+PROCESSED_DATA_DIR = "processed"
 
 
 rule _001b_gtex_OUTRIDER:
     input:
-         RAW_DATA_DIR
+         os.path.join(RAW_DATA_DIR, "gtex/{count_type}")
     output:
-          os.path.join(CACHE_DATA_DIR, "observations.parquet"),
-          os.path.join(CACHE_DATA_DIR, "features.parquet"),
-          os.path.join(CACHE_DATA_DIR, "counts.parquet"),
-          os.path.join(CACHE_DATA_DIR, "l2fc.parquet"),
-          os.path.join(CACHE_DATA_DIR, "mu.parquet"),
-          os.path.join(CACHE_DATA_DIR, "theta.parquet"),
-          os.path.join(CACHE_DATA_DIR, "log_cdf.parquet"),
-          os.path.join(CACHE_DATA_DIR, "zscore.parquet"),
-          os.path.join(CACHE_DATA_DIR, "pval.parquet"),
-          os.path.join(CACHE_DATA_DIR, "padj.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "observations.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "features.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "counts.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "l2fc.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "mu.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "theta.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "log_cdf.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "zscore.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "pval.parquet"),
+          os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "padj.parquet"),
     params:
-          output_dir=CACHE_DATA_DIR,
+          output_dir=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}"),
           alpha_cutoff=0.05
     shell:
          "Rscript %s/scripts/001_gtex_OUTRIDER.R {input} {params.output_dir} {params.alpha_cutoff}" % SNAKEMAKE_DIR
 
-# rule _001b_convert_to_h5ad:
-#     input:
-#          observations=os.path.join(CACHE_DATA_DIR, "observations.csv.gz"),
-#          features=os.path.join(CACHE_DATA_DIR, "features.csv.gz"),
-#          target=os.path.join(CACHE_DATA_DIR, "{target}.csv.gz"),
-#          #l2fc = os.path.join(CACHE_DATA_DIR, "l2fc.csv.gz"),
-#          #mu = os.path.join(CACHE_DATA_DIR, "mu.csv.gz"),
-#          #theta = os.path.join(CACHE_DATA_DIR, "theta.csv.gz"),
-#     output:
-#           os.path.join(PROCESSED_DATA_DIR, "{target}.h5ad")
-#           #os.path.join(PROCESSED_DATA_DIR, "l2fc.h5ad")
-#           #os.path.join(PROCESSED_DATA_DIR, "mu.h5ad")
-#           #os.path.join(PROCESSED_DATA_DIR, "theta.h5ad")
-#     #     wildcard_constraints:
-#     #         target="counts|l2fc"
-#     run:
-#         convert_to_h5ad(
-#             input.observations,
-#             input.features,
-#             input.target,
-#             output[0]
-#         )
 
-rule _001b_convert_to_xarray:
+rule _001b_outrider_convert_to_xarray:
     input:
-         observations=os.path.join(CACHE_DATA_DIR, "observations.parquet"),
-         features=os.path.join(CACHE_DATA_DIR, "features.parquet"),
-         counts=os.path.join(CACHE_DATA_DIR, "counts.parquet"),
-         l2fc=os.path.join(CACHE_DATA_DIR, "l2fc.parquet"),
-         mu=os.path.join(CACHE_DATA_DIR, "mu.parquet"),
-         theta=os.path.join(CACHE_DATA_DIR, "theta.parquet"),
-         log_cdf=os.path.join(CACHE_DATA_DIR, "log_cdf.parquet"),
-         zscore=os.path.join(CACHE_DATA_DIR, "zscore.parquet"),
-         pval=os.path.join(CACHE_DATA_DIR, "pval.parquet"),
-         padj=os.path.join(CACHE_DATA_DIR, "padj.parquet"),
+         observations=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "observations.parquet"),
+         features=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "features.parquet"),
+         counts=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "counts.parquet"),
+         l2fc=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "l2fc.parquet"),
+         mu=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "mu.parquet"),
+         theta=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "theta.parquet"),
+         log_cdf=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "log_cdf.parquet"),
+         zscore=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "zscore.parquet"),
+         pval=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "pval.parquet"),
+         padj=os.path.join(CACHE_DATA_DIR, "gtex/{count_type}", "padj.parquet"),
     output:
-          directory(os.path.join(PROCESSED_DATA_DIR, "gtex_unstacked.zarr"))
+          directory(os.path.join(PROCESSED_DATA_DIR, "gtex/{count_type}", "gtex_unstacked.zarr"))
           #     wildcard_constraints:
           #         target="counts|l2fc"
     run:
