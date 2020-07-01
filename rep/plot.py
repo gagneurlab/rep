@@ -277,7 +277,7 @@ def density_scatter(
         rasterized=rasterized,
     )
     if marker_colornorm:
-        if (type(marker_colornorm) == str) and marker_colornorm.tolower() == "log":
+        if (type(marker_colornorm) == str) and marker_colornorm.lower() == "log":
             combined_scatter_kwargs["norm"] = matplotlib.colors.LogNorm()
         else:
             combined_scatter_kwargs["norm"] = marker_colornorm
