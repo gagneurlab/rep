@@ -239,7 +239,7 @@ def density_scatter(
         plt.show()
         ```
     """
-    if data:
+    if data is not None:
         x = data.loc[:, x].values
         y = data.loc[:, y].values
 
