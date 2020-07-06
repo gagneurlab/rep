@@ -197,6 +197,7 @@ def tp_at_k_plot(y_trues, y_preds, labels=None, add_random_uniform=False, legend
 def density_scatter(
         x,
         y,
+        data=None,
         xlab="x",
         ylab="y",
         xlim=None,
@@ -238,6 +239,10 @@ def density_scatter(
         plt.show()
         ```
     """
+    if data:
+        x = data[x]
+        y = data[y]
+    
     from scipy.interpolate import interpn
     xy = pd.DataFrame({xlab: x, ylab: y})
     xy = xy.dropna().reset_index(drop=True)
