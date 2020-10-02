@@ -176,6 +176,8 @@ class GTExTranscriptProportions:
         #                  ].to_dataframe().iloc[:, 0]
 
     def get_canonical_transcript(self, gene, subtissues=None):
+        if isinstance(subtissues, str):
+            subtissues = [subtissues]
         if isinstance(gene, str):
             return pd.DataFrame.from_records(
                 self._get_canonical_transcript(gene, subtissues),
