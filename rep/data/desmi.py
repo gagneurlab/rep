@@ -130,6 +130,66 @@ class GTExTranscriptProportions:
             con=self.db_conn,
         )["subtissue"]
 
+    def _get_canonical_transcript(self, gene, subtissues=None):
+        """
+        Idea:
+         1) Check if there is only one transcript in a gene; when true, return this as canonical.
+         2) Otherwise, return maximum-expressed transcript per subtissue as canonical.
+             If there is a missing value for a subtissue, replace it with the mean proportion across subtissues.
+
+        Args:
+            gene:
+            subtissues:
+
+        Returns:
+
+        """
+        if subtissues is None:
+            subtissues = self.subtissues
+
+        val = self.get(gene=gene)  # get all available subtissues
+        val = val.set_coords("gene").median_transcript_proportions
+
+        if len(val.transcript) == 1:
+            # there is only one transcript
+            for subt in subtissues:
+                yield gene, subt, val.transcript.item()
+        else:
+            val_mean = val.mean(dim="subtissue")
+
+            mean_canonical_transcript = val_mean.argmax(dim="transcript")
+            mean_canonical_transcript = val.transcript[mean_canonical_transcript].item()
+
+            # Replace NaN's with the mean expression proportion across tissues
+            val = val.fillna(val_mean)
+
+            for subt in subtissues:
+                if subt in val.subtissue:
+                    val_subt = val.sel(subtissue=subt)
+                    yield gene, subt, val.transcript[val_subt.argmax(dim="transcript")].item()
+                else:
+                    yield gene, subt, mean_canonical_transcript
+
+        # max_transcript = xrds.transcript[
+        #                      xrds.set_coords("gene").median_transcript_proportions.groupby("gene").apply(
+        #                          lambda c: c.argmax(dim="transcript"))
+        #                  ].to_dataframe().iloc[:, 0]
+
+    def get_canonical_transcript(self, gene, subtissues=None):
+        if isinstance(gene, str):
+            return pd.DataFrame.from_records(
+                self._get_canonical_transcript(gene, subtissues),
+                columns=["gene", "subtissue", "transcript"]
+            ).set_index(["gene", "subtissue"])
+        else:
+            return pd.concat([
+                pd.DataFrame.from_records(
+                    self._get_canonical_transcript(g, subtissues),
+                    columns=["gene", "subtissue", "transcript"]
+                ).set_index(["gene", "subtissue"])
+                for g in gene
+            ], axis=0)
+
     def get(self, gene=None, subtissue=None):
         if gene is None:
             gene = self.genes
