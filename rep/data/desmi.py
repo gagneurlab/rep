@@ -7,6 +7,8 @@ import xarray as xr
 
 import desmi
 
+from cached_property import cached_property
+
 
 class VariantCSQDataset:
     def __init__(self, db_conn=None):
@@ -110,6 +112,7 @@ class GTExTranscriptProportions:
     def __init__(self, db_conn=None):
         self.db_conn = desmi.database.get_db_conn(db_conn)
 
+    @cached_property
     def genes(self):
         return pd.read_sql(
             """
@@ -118,6 +121,7 @@ class GTExTranscriptProportions:
             con=self.db_conn,
         )["gene"]
 
+    @cached_property
     def subtissues(self):
         return pd.read_sql(
             """
@@ -126,7 +130,13 @@ class GTExTranscriptProportions:
             con=self.db_conn,
         )["subtissue"]
 
-    def get(self, gene, subtissue):
+    def get(self, gene=None, subtissue=None):
+        if gene is None:
+            gene = self.genes
+
+        if subtissue is None:
+            subtissue = self.subtissues
+
         # make sure that genes will be a list
         if isinstance(gene, str):
             genes = [gene]
@@ -183,6 +193,6 @@ class GTExTranscriptProportions:
         xrds["tissue"] = xrds["tissue"].isel(transcript=0)
 
         # make sure that subtissues are aligned as specified
-        xrds = xr.align(xrds, indexes={"subtissue": subtissues})
+        (xrds,) = xr.align(xrds, indexes={"subtissue": subtissues})
 
         return xrds
