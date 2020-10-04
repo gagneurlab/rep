@@ -10,75 +10,122 @@ import desmi
 from cached_property import cached_property
 
 
-class VariantCSQDataset:
-    def __init__(self, db_conn=None):
-        self.db_conn = desmi.database.get_db_conn(db_conn)
+# class VariantCSQDataset:
+#     def __init__(self, db_conn=None):
+#         self.db_conn = desmi.database.get_db_conn(db_conn)
+#
+#     def sel(self, gene, af_limit=1):
+#         # make sure that genes will be a list
+#         if isinstance(gene, str):
+#             genes = [gene]
+#         else:
+#             genes = gene
+#
+#         df_iter = pd.read_sql(
+#             #             """
+#             #             select
+#             #                 -- g."chrom",
+#             #                 -- g."start",
+#             #                 -- g."end",
+#             #                 -- g."ref",
+#             #                 -- g."alt",
+#             #                 -- g."GT",
+#             #                 -- g."AF",
+#             #                 -- g."AC",
+#             #                 -- g."feature",
+#             #                 -- g."feature_type",
+#             #                 -- g."gene",
+#             #                 -- g."{target_feature}",
+#             #             """
+#             f"""
+#             select
+#                 g.*,
+#             from hoelzlwi.gtex_features as g
+#             where
+#                 g."gene" IN ('{"', '".join(genes)}')
+#                 and g."AF" <= '{af_limit}'
+#             order by g."gene"
+#             ;
+#             """,
+#             # and g."{target_feature}" = '1'
+#             con=self.db_conn,
+#             chunksize=VARIANTS_CHUNKSIZE,
+#         )
+#
+#         # some type casting
+#         for df in df_iter:
+#             df = df.astype({
+#                 **{f: "boolean" for f in flags},
+#                 **{s: "float32" for s in scores_higher_is_deleterious},
+#                 **{s: "float32" for s in scores_lower_is_deleterious},
+#                 **{s: "float32" for s in scores_absdiff_is_deleterious},
+#                 **{c: "float32" for c in [
+#                     "mean_transcript_proportions",
+#                     "median_transcript_proportions",
+#                     "sd_transcript_proportions",
+#                     "blood_mean_transcript_proportions",
+#                     "blood_median_transcript_proportions",
+#                     "blood_sd_transcript_proportions",
+#                 ]},
+#                 **{c: "str" for c in [
+#                     "condel_prediction",
+#                     "sift_prediction",
+#                 ]},
+#             }).fillna({
+#                 "mean_transcript_proportions": 0,
+#                 "median_transcript_proportions": 0,
+#                 "sd_transcript_proportions": 0,
+#             })
+#
+#             # yield the casted df
+#             yield df
 
-    def sel(self, gene, af_limit=1):
-        # make sure that genes will be a list
-        if isinstance(gene, str):
-            genes = [gene]
-        else:
-            genes = gene
+class DesmiGTFetcher:
+    def __init__(self, gt_array: desmi.genotype.Genotype):
+        self.gt_array = gt_array
 
-        df_iter = pd.read_sql(
-            #             """
-            #             select
-            #                 -- g."chrom",
-            #                 -- g."start",
-            #                 -- g."end",
-            #                 -- g."ref",
-            #                 -- g."alt",
-            #                 -- g."GT",
-            #                 -- g."AF",
-            #                 -- g."AC",
-            #                 -- g."feature",
-            #                 -- g."feature_type",
-            #                 -- g."gene",
-            #                 -- g."{target_feature}",
-            #             """
-            f"""
-            select
-                g.*,
-            from hoelzlwi.gtex_features as g
-            where
-                g."gene" IN ('{"', '".join(genes)}')
-                and g."AF" <= '{af_limit}'
-            order by g."gene"
-            ;
-            """,
-            # and g."{target_feature}" = '1'
-            con=self.db_conn,
-            chunksize=VARIANTS_CHUNKSIZE,
+    def get(self, variant: desmi.objects.Variant, variable=["GT", "GQ", "DP", "AC", "AF"]) -> xr.Dataset:
+        gt_array = self.gt_array
+
+        retval = xr.Dataset(
+            data_vars={
+                v: xr.DataArray(
+                    gt_array.get(var=variant, path=v),
+                    dims=("variant", "sample_id"),
+                ) for v in variable if v in {"GT", "GQ", "DP"}
+            },
+            coords={
+                "variant": (("variant",), variant.to_records()),
+                #                  "variant": (("variant",), variant.df.index),
+                #                  **{c: (("variant", ), v) for c, v in variant.df.items()},
+                "sample_id": (("sample_id",), gt_array.sample_anno.sample_id),
+                "sample_idx": (("sample_id",), gt_array.sample_anno.sample_idx),
+            }
         )
 
-        # some type casting
-        for df in df_iter:
-            df = df.astype({
-                **{f: "boolean" for f in flags},
-                **{s: "float32" for s in scores_higher_is_deleterious},
-                **{s: "float32" for s in scores_lower_is_deleterious},
-                **{s: "float32" for s in scores_absdiff_is_deleterious},
-                **{c: "float32" for c in [
-                    "mean_transcript_proportions",
-                    "median_transcript_proportions",
-                    "sd_transcript_proportions",
-                    "blood_mean_transcript_proportions",
-                    "blood_median_transcript_proportions",
-                    "blood_sd_transcript_proportions",
-                ]},
-                **{c: "str" for c in [
-                    "condel_prediction",
-                    "sift_prediction",
-                ]},
-            }).fillna({
-                "mean_transcript_proportions": 0,
-                "median_transcript_proportions": 0,
-                "sd_transcript_proportions": 0,
-            })
+        if "GT" in variable:
+            if "AC" in variable:
+                retval["AC"] = retval.GT.sum(dim="sample_id")
 
-            # yield the casted df
-            yield df
+                if "AF" in variable:
+                    retval["AF"] = retval.AC / (retval.dims["sample_id"] * 2)
+
+        return retval
+
+    def to_xarray(self, *args, **kwargs) -> xr.Dataset:
+        return self.get(*args, **kwargs)
+
+    def to_dataframe(self, *args, filter_reference_allele=True, **kwargs) -> pd.DataFrame:
+        retval = self.get(*args, **kwargs).to_dataframe()
+        if filter_reference_allele:
+            retval = retval.query("(GT > 0)")
+
+        retval = retval.assign(
+            GT=retval["GT"].astype(pd.CategoricalDtype([0, 1, 2])).cat.rename_categories(
+                {0: "reference", 1: "heterozygous", 2: "homozygous"})
+        )
+
+        return retval
 
 
 class GTExTranscriptProportions:
@@ -130,7 +177,7 @@ class GTExTranscriptProportions:
             con=self.db_conn,
         )["subtissue"]
 
-    def _get_canonical_transcript(self, gene, subtissues=None):
+    def _get_canonical_transcript(self, gene, subtissue=None):
         """
         Idea:
          1) Check if there is only one transcript in a gene; when true, return this as canonical.
@@ -139,20 +186,20 @@ class GTExTranscriptProportions:
 
         Args:
             gene:
-            subtissues:
+            subtissue:
 
         Returns:
 
         """
-        if subtissues is None:
-            subtissues = self.subtissues
+        if subtissue is None:
+            subtissue = self.subtissues
 
         val = self.get(gene=gene)  # get all available subtissues
         val = val.set_coords("gene").median_transcript_proportions
 
         if len(val.transcript) == 1:
             # there is only one transcript
-            for subt in subtissues:
+            for subt in subtissue:
                 yield gene, subt, val.transcript.item()
         else:
             val_mean = val.mean(dim="subtissue")
@@ -163,7 +210,7 @@ class GTExTranscriptProportions:
             # Replace NaN's with the mean expression proportion across tissues
             val = val.fillna(val_mean)
 
-            for subt in subtissues:
+            for subt in subtissue:
                 if subt in val.subtissue:
                     val_subt = val.sel(subtissue=subt)
                     yield gene, subt, val.transcript[val_subt.argmax(dim="transcript")].item()
@@ -175,24 +222,26 @@ class GTExTranscriptProportions:
         #                          lambda c: c.argmax(dim="transcript"))
         #                  ].to_dataframe().iloc[:, 0]
 
-    def get_canonical_transcript(self, gene, subtissues=None):
-        if isinstance(subtissues, str):
-            subtissues = [subtissues]
+    def get_canonical_transcript(self, gene, subtissue=None) -> pd.Series:
+        if isinstance(subtissue, str):
+            subtissue = [subtissue]
         if isinstance(gene, str):
-            return pd.DataFrame.from_records(
-                self._get_canonical_transcript(gene, subtissues),
+            retval_df = pd.DataFrame.from_records(
+                self._get_canonical_transcript(gene, subtissue),
                 columns=["gene", "subtissue", "transcript"]
             ).set_index(["gene", "subtissue"])
+            return retval_df["transcript"]
         else:
-            return pd.concat([
+            retval_df = pd.concat([
                 pd.DataFrame.from_records(
-                    self._get_canonical_transcript(g, subtissues),
+                    self._get_canonical_transcript(g, subtissue),
                     columns=["gene", "subtissue", "transcript"]
                 ).set_index(["gene", "subtissue"])
                 for g in gene
             ], axis=0)
+            return retval_df["transcript"]
 
-    def get(self, gene=None, subtissue=None):
+    def get(self, gene=None, subtissue=None) -> xr.Dataset:
         if gene is None:
             gene = self.genes
 

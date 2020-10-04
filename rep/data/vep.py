@@ -149,14 +149,12 @@ class VEPGeneLevelVariantAggregator:
         else:
             self.gtex_tp = gtex_tp
 
-
-
     def agg_gene_level(self, gene, subtissue=None):
         transcript_level_df = self.vep_tl_aggr[gene]
-        max_transcript_df = self.get_canonical_transcript(gene=gene, subtissue=subtissue)
+        max_transcript_df = self.gtex_tp.get_canonical_transcript(gene=gene, subtissue=subtissue)
+        max_transcript_df = pd.DataFrame(dict(feature=max_transcript_df)).set_index("feature", append=True)
 
-        gene_level_df = pd.DataFrame(dict(feature=max_transcript_df)).set_index("feature", append=True).join(
-            transcript_level_df)
+        gene_level_df = max_transcript_df.join(transcript_level_df)
         gene_level_df = gene_level_df.droplevel("feature")
 
         return gene_level_df
