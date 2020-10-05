@@ -6,8 +6,13 @@ from rep.data.desmi import GTExTranscriptProportions, DesmiGTFetcher
 from rep.data.expression import GeneExpressionFetcher
 from rep.data.vep import VEPTranscriptLevelVariantAggregator, VEPGeneLevelVariantAggregator
 
+__all__ = [
+    "_expression_xrds",
+    "REPGeneLevelDL",
+]
 
-def expression_xrds(gene_expression_zarr_path, samples=None):
+
+def _expression_xrds(gene_expression_zarr_path, samples=None):
     xrds = xr.open_zarr(gene_expression_zarr_path)
     xrds["gene"] = xrds["gene"].to_pandas().apply(lambda g: g.split(".")[0])
     if samples is not None:
@@ -26,19 +31,26 @@ class REPGeneLevelDL:
 
             gt_array_path,
             gene_expression_zarr_path,
+            gene_expression_variables=("zscore", "missing", "hilo_padj"),
             expression_query="~ missing",
             expression_vep_join="left",
             target_tissues=("Lung", "Brain")
     ):
         self.dataloaders = {}
+        self.target_tissues = target_tissues
 
         self.expression_query = expression_query
         self.expression_vep_join = expression_vep_join
 
         gt_array = desmi.genotype.Genotype(path=gt_array_path)
         gt_fetcher = DesmiGTFetcher(gt_array=gt_array)
+        expression_xrds = _expression_xrds(gene_expression_zarr_path, samples=gt_array.samples())
 
-        self.expression_xrds = expression_xrds(gene_expression_zarr_path, samples=gt_array.samples())
+        self.gt_array = gt_array
+        self.gt_fetcher = gt_fetcher
+        self.expression_xrds = expression_xrds
+
+        self.genes = expression_xrds.gene
 
         vep_anno = desmi.annotations.get("VEP")
         vep_tl_agg = VEPTranscriptLevelVariantAggregator(
@@ -50,12 +62,15 @@ class REPGeneLevelDL:
         self.dataloaders["vep"] = vep_gl_agg
 
         #         if "expression" in self.features:
-        gene_expression_fetcher = GeneExpressionFetcher(xrds, variables=self.features.get("expression", None))
+        gene_expression_fetcher = GeneExpressionFetcher(
+            expression_xrds,
+            variables=gene_expression_variables
+        )
         self.dataloaders["expression"] = gene_expression_fetcher
 
-    @property
-    def target_tissues(self):
-        return self.expression.subtissue.values
+    # @property
+    # def target_tissues(self):
+    #     return self.expression_xrds.subtissue.values
 
     def get(self, gene):
         vep = self.dataloaders.get("vep")[dict(gene=gene)]
@@ -77,6 +92,6 @@ class REPGeneLevelDL:
         return self.get(**selection)
 
     def iter(self):
-        for gene in self.xrds.gene:
+        for gene in self.genes:
             for batch in self.get(gene):
                 yield batch

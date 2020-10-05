@@ -81,7 +81,6 @@ class DesmiGenotype(BaseGenotype):
             genomic_range = genomic_range.intersect(self.selectors.get("genomic_range"))
 
 
-
 class AbstractXBag(meta=abc.ABCMeta):
     _dims: Set[str]
 

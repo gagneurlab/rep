@@ -10,6 +10,11 @@ from cached_property import cached_property
 import desmi
 from rep.data.desmi import GTExTranscriptProportions
 
+__all__ = [
+    "VEPGeneLevelVariantAggregator",
+    "VEPTranscriptLevelVariantAggregator"
+]
+
 
 class VEPTranscriptLevelVariantAggregator:
     functions = {

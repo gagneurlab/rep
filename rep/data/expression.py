@@ -1,6 +1,10 @@
 import xarray as xr
 import pandas as pd
 
+__all__ = [
+    "GeneExpressionFetcher"
+]
+
 
 class GeneExpressionFetcher:
     def __init__(self, xrds: xr.Dataset, variables=None):

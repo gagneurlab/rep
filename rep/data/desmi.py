@@ -9,6 +9,11 @@ import desmi
 
 from cached_property import cached_property
 
+__all__ = [
+    "GTExTranscriptProportions",
+    "DesmiGTFetcher",
+]
+
 
 # class VariantCSQDataset:
 #     def __init__(self, db_conn=None):
