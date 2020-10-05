@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import Callable, Dict
 
 import pandas as pd
 import numpy as np
@@ -31,12 +32,16 @@ class VEPTranscriptLevelVariantAggregator:
         'pval_max_significant': lambda c: np.fmin(- np.log(np.nanmin(c)), 30),
     }
 
-    def __init__(self, vep_anno, gt_fetcher, variables=None, genotype_query="(GQ >= 80) & (DP >= 4) & (AF < 0.01)"):
+    def __init__(
+            self,
+            vep_anno,
+            gt_fetcher,
+            variables=None,
+            metadata_transformer: Dict[str, Callable] = None,
+            genotype_query="(GQ >= 80) & (DP >= 4) & (AF < 0.01)"
+    ):
         self.vep_anno = vep_anno
         self.gt_fetcher = gt_fetcher
-
-        self.variables = variables
-        self.genotype_query = genotype_query
 
         if variables is None:
             self.variables = {
@@ -50,6 +55,9 @@ class VEPTranscriptLevelVariantAggregator:
             }
         else:
             self.variables = variables
+
+        self.metadata_transformer = metadata_transformer
+        self.genotype_query = genotype_query
 
     def get_vep_csq(self, gene, variants: desmi.objects.Variant = None) -> pd.DataFrame:
         if variants is None:
@@ -130,8 +138,24 @@ class VEPTranscriptLevelVariantAggregator:
         gt_df = self.get_gt_df(variants)
         vep_csq = self.get_vep_csq(gene=gene, variants=variants)
 
-        agg = vep_csq.join(gt_df).groupby(["GT", "gene", "feature", "sample_id"])
-        agg = agg.agg(agg_functions)
+        retval = {
+            "metadata": {
+            }
+        }
+
+        grouped = vep_csq.join(gt_df).groupby(["GT", "gene", "feature", "sample_id"])
+
+        # calculate size metadata
+        size = grouped.agg("size")
+        retval["metadata"]["size"] = size
+        if self.metadata_transformer is not None:
+            if isinstance(self.metadata_transformer, dict):
+                for k, v in self.metadata_transformer:
+                    retval["metadata"][k] = v(grouped)
+            else:
+                return ValueError("Dictionary of functions expected!")
+
+        agg = grouped.agg(agg_functions)
         agg = agg.unstack("GT")
         agg = agg.loc[:, agg.columns.to_frame().query("GT != 'reference'").index]
 
@@ -139,7 +163,16 @@ class VEPTranscriptLevelVariantAggregator:
             # flatten multiindex: concatenate levels with '.'
             agg.columns = [".".join(c) for c in agg.columns.to_list()]
 
-        return agg.astype("float32")
+        # cast to float
+        agg = agg.astype("float32")
+
+        retval = {
+            "input": agg,
+            "metadata": {
+                "size": size,
+            }
+        }
+        return retval
 
     def __getitem__(self, gene):
         if isinstance(gene, str):
