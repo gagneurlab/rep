@@ -148,7 +148,7 @@ def rep_gl_dl():
 
     rep_gl_dl = REPGeneLevelDL(
         gt_array_path="/s/project/variantDatabase/fastStorage/genotypeArray_GTEx_v7-hg19/",
-        gene_expression_zarr_path='/s/project/rep/processed/gtex/OUTRIDER/gtex_unstacked.zarr',
+        expression_xrds='/s/project/rep/processed/gtex/OUTRIDER/gtex_unstacked.zarr',
         vep_variables=variables["vep"],
         gene_expression_variables=variables["expression"]["variables"],
     )
@@ -168,10 +168,16 @@ def test_rep_gl_dl_iter(rep_gl_dl):
         break
 
 
-def test_rep_gl_dl_train_iter(rep_gl_dl, gene):
+def test_rep_gl_dl_train_iter(rep_gl_dl):
     for b in rep_gl_dl.train_iter():
         assert isinstance(b, dict)
         assert b["target"]["missing"].notnull().all()
 
         # stop after first batch
         break
+
+
+def test_rep_gl_dl_train_iter_gene(rep_gl_dl, gene):
+    for b in rep_gl_dl.train_iter(genes=["ENSG00000000003"]):
+        assert isinstance(b, dict)
+        assert b["target"]["missing"].notnull().all()

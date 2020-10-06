@@ -1,4 +1,5 @@
 import collections
+from typing import List
 
 import xarray as xr
 import pandas as pd
@@ -7,6 +8,8 @@ import desmi
 from rep.data.desmi import GTExTranscriptProportions, DesmiGTFetcher
 from rep.data.expression import GeneExpressionFetcher
 from rep.data.vep import VEPTranscriptLevelVariantAggregator, VEPGeneLevelVariantAggregator
+
+from cached_property import cached_property
 
 __all__ = [
     "_expression_xrds",
@@ -35,7 +38,7 @@ class REPGeneLevelDL:
             self,
             vep_variables,
             gt_array_path,
-            gene_expression_zarr_path,
+            expression_xrds,
             target_tissues=None,
             sample_ids=None,
             gene_expression_variables=None,
@@ -51,12 +54,12 @@ class REPGeneLevelDL:
             gene_expression_variables = ["zscore", "missing", "hilo_padj"]
         if gene_expression_subtissues is None:
             gene_expression_subtissues = ["Whole Blood", "Cells - Transformed fibroblasts"]
-        if target_tissues is None:
-            target_tissues = ["Lung", "Brain"]
         if vep_tl_args is None:
             vep_tl_args = {}
         if vep_gl_args is None:
             vep_gl_args = {}
+        if isinstance(expression_xrds, str):
+            expression_xrds = _expression_xrds(expression_xrds)
 
         self.dataloaders = {}
         self.gene_expression_variables = gene_expression_variables
@@ -71,8 +74,9 @@ class REPGeneLevelDL:
         # setup genotype
         gt_array = desmi.genotype.Genotype(path=gt_array_path)
         gt_fetcher = DesmiGTFetcher(gt_array=gt_array)
-        # get gene expression dataset
-        expression_xrds = _expression_xrds(gene_expression_zarr_path, samples=gt_array.samples())
+
+        if target_tissues is None:
+            target_tissues = expression_xrds.subtissue.values
 
         if sample_ids is not None:
             expression_xrds = expression_xrds.sel(sample_id=sample_ids)
@@ -108,6 +112,13 @@ class REPGeneLevelDL:
         )
         self.dataloaders["expression"] = gene_expression_fetcher
 
+    @cached_property
+    def _is_missing(self):
+        return self.expression_xrds.missing.all(dim="sample_id").to_dataframe()["missing"]
+
+    def is_expressed(self, gene, subtissue):
+        return not self._is_missing.loc[(subtissue, gene)]
+
     # @property
     # def target_tissues(self):
     #     return self.expression_xrds.subtissue.values
@@ -127,6 +138,9 @@ class REPGeneLevelDL:
         # add to batch
 
         for t in self.target_tissues:
+            if not self.is_expressed(gene, t):
+                continue
+
             index = pd.MultiIndex.from_product(
                 [[t], [gene], self.sample_ids],
                 names=["subtissue", "gene", "sample_id"]
@@ -137,16 +151,22 @@ class REPGeneLevelDL:
             batch_df = batch_df.join(expression, how="left")
             # add vep to batch
             batch_df = batch_df.join(vep["input"], how="left")
+            # batch_df = batch_df.join(vep["input"].assign(vep_missing=-1), how="left")
+            # batch_df.loc[:, "vep_missing"] = (batch_df["vep_missing"].fillna(0) + 1).astype(bool)
             batch_df = batch_df.reorder_levels(order=["subtissue", "gene", "sample_id"])
 
             batch = {
                 # "gene": [gene],
                 # "subtissue": [t],
-                "sample_id": self.sample_ids,
-                "index": index,
-                "input": batch_df,
+                # "sample_id": self.sample_ids,
+                # "index": index,
+                "inputs": batch_df,
                 "metadata": {
+                    "index": batch_df.index,
                     "vep": vep["metadata"],
+                    "vep_present": batch_df.index.isin(
+                        vep["input"].index.reorder_levels(order=["subtissue", "gene", "sample_id"])
+                    ),
                 }
             }
             yield batch
@@ -163,17 +183,20 @@ class REPGeneLevelDL:
                     continue
                 yield batch
 
-    def train_iter(self, genes=None):
+    def train_iter(self, genes: List[str] = None, target_variable="zscore"):
         if genes is None:
             genes = self.genes
         for gene in genes:
-            for batch in self.get(gene):
-                if batch is None:
-                    continue
-                target = self.dataloaders.get("expression")[dict(
-                    gene=batch["index"].unique("gene"),
-                    subtissue=batch["index"].unique("subtissue")
-                )]
+            batch_iter = self.get(gene)
+            if batch_iter is None:
+                continue
+            for batch in batch_iter:
+                targets = self.expression_xrds[[target_variable, "missing"]].sel(
+                    gene=batch["metadata"]["index"].unique("gene"),
+                    subtissue=batch["metadata"]["index"].unique("subtissue"),
+                    sample_id=batch["metadata"]["index"].unique("sample_id"),
+                ).to_dataframe()
+                targets = targets.query("~ missing")[target_variable]
                 # target = expression.query(self.expression_query, engine="python")
                 #             expression, vep = expression.align(vep, axis=0, join=self.expression_vep_join)
                 #             batch = {
@@ -182,8 +205,10 @@ class REPGeneLevelDL:
                 #             }
 
                 # align to batch index
-                target = pd.DataFrame(index=batch["index"]).join(target, how="left")
 
-                batch["target"] = target
+                targets, inputs = targets.align(batch["inputs"], join="inner", axis=0)
+                batch["inputs"] = inputs
+                batch["targets"] = targets
+                batch["metadata"]["index"] = targets.index
 
                 yield batch
