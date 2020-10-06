@@ -1,6 +1,6 @@
 import os
 import sys
-from typing import Callable, Dict
+from typing import Callable, Dict, Union
 
 import pandas as pd
 import numpy as np
@@ -131,11 +131,13 @@ class VEPTranscriptLevelVariantAggregator:
 
     #         }
 
-    def agg_transcript_level(self, gene, flatten_cols=True):
+    def agg_transcript_level(self, gene, flatten_cols=True) -> Union[Dict[str, object], None]:
         agg_functions = self.aggregation_functions
 
         variants = self.get_variants_for_gene(gene)
         gt_df = self.get_gt_df(variants)
+        if gt_df.empty:
+            return None
         vep_csq = self.get_vep_csq(gene=gene, variants=variants)
 
         retval = {
@@ -146,7 +148,7 @@ class VEPTranscriptLevelVariantAggregator:
         grouped = vep_csq.join(gt_df).groupby(["GT", "gene", "feature", "sample_id"])
 
         # calculate size metadata
-        size = grouped.agg("size").unstack("GT")[["heterozygous", "homozygous"]]
+        size = grouped.agg("size").unstack("GT").loc[:, ["heterozygous", "homozygous"]]
         retval["metadata"]["size"] = size
 
         if self.metadata_transformer is not None:
@@ -168,7 +170,8 @@ class VEPTranscriptLevelVariantAggregator:
         agg = agg.astype("float32")
 
         retval = {
-            "gene": [gene],
+            # "gene": [gene],
+            "index": agg.index,
             "input": agg,
             "metadata": {
                 "size": size,
@@ -189,17 +192,20 @@ class VEPGeneLevelVariantAggregator:
         else:
             self.gtex_tp = gtex_tp
 
-    def agg_gene_level(self, gene, subtissue=None):
+    def agg_gene_level(self, gene, subtissue=None) -> Union[Dict[str, object], None]:
         if isinstance(subtissue, str):
             subtissue = [subtissue]
 
         transcript_level_batch = self.vep_tl_aggr[gene]
+        if transcript_level_batch is None:
+            return None
+
         max_transcript_df = self.gtex_tp.get_canonical_transcript(gene=gene, subtissue=subtissue)
         max_transcript_df = pd.DataFrame(dict(feature=max_transcript_df)).set_index("feature", append=True)
 
         retval = {
-            "gene": [gene],
-            "subtissue": subtissue,
+            # "gene": [gene],
+            # "subtissue": subtissue,
             "metadata": {
             }
         }

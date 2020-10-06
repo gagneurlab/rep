@@ -115,6 +115,8 @@ class REPGeneLevelDL:
     def get(self, gene):
         # this loads a dataframe of multiple target tissues
         vep = self.dataloaders.get("vep")[dict(gene=gene, subtissue=self.target_tissues)]
+        if vep is None:
+            return None
 
         # gene expression input is independent of the target tissue
         expression = self.dataloaders.get("expression")[dict(gene=gene, subtissue=self.gene_expression_subtissues)]
@@ -138,8 +140,8 @@ class REPGeneLevelDL:
             batch_df = batch_df.reorder_levels(order=["subtissue", "gene", "sample_id"])
 
             batch = {
-                "gene": [gene],
-                "subtissue": [t],
+                # "gene": [gene],
+                # "subtissue": [t],
                 "sample_id": self.sample_ids,
                 "index": index,
                 "input": batch_df,
@@ -152,15 +154,26 @@ class REPGeneLevelDL:
     def __getitem__(self, selection):
         return self.get(**selection)
 
-    def iter(self):
-        for gene in self.genes:
+    def iter(self, genes=None):
+        if genes is None:
+            genes = self.genes
+        for gene in genes:
             for batch in self.get(gene):
+                if batch is None:
+                    continue
                 yield batch
 
-    def train_iter(self):
-        for gene in self.genes:
+    def train_iter(self, genes=None):
+        if genes is None:
+            genes = self.genes
+        for gene in genes:
             for batch in self.get(gene):
-                target = self.dataloaders.get("expression")[dict(gene=batch["gene"], subtissue=batch["subtissue"])]
+                if batch is None:
+                    continue
+                target = self.dataloaders.get("expression")[dict(
+                    gene=batch["index"].unique("gene"),
+                    subtissue=batch["index"].unique("subtissue")
+                )]
                 # target = expression.query(self.expression_query, engine="python")
                 #             expression, vep = expression.align(vep, axis=0, join=self.expression_vep_join)
                 #             batch = {

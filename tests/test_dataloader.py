@@ -54,7 +54,7 @@ def vep_tl_agg(vep_anno, gt_fetcher):
 
 def test_VEPTranscriptLevelVariantAggregator(vep_tl_agg, gene):
     agg = vep_tl_agg.agg_transcript_level(gene)
-    assert isinstance(agg, pd.DataFrame)
+    assert isinstance(agg["input"], pd.DataFrame)
 
 
 @pytest.fixture()
@@ -82,7 +82,7 @@ def vep_gl_agg(vep_tl_agg):
 
 def test_vep_gl_agg(vep_gl_agg, gene):
     agg = vep_gl_agg.agg_gene_level(gene, subtissue="Whole Blood")
-    assert isinstance(agg, pd.DataFrame)
+    assert isinstance(agg["input"], pd.DataFrame)
 
 
 @pytest.fixture()
