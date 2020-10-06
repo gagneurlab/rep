@@ -1,3 +1,5 @@
+import collections
+
 import xarray as xr
 import pandas as pd
 
@@ -39,7 +41,10 @@ class REPGeneLevelDL:
             gene_expression_variables=None,
             gene_expression_subtissues=None,
             expression_query="~ missing",
-            expression_vep_join="left",
+            # expression_vep_join="left",
+            genotype_query: str = "(GQ >= 80) & (DP >= 4) & (AF < 0.01)",
+            vep_tl_args=None,
+            vep_gl_args=None,
     ):
         # set default values
         if gene_expression_variables is None:
@@ -48,12 +53,20 @@ class REPGeneLevelDL:
             gene_expression_subtissues = ["Whole Blood", "Cells - Transformed fibroblasts"]
         if target_tissues is None:
             target_tissues = ["Lung", "Brain"]
+        if vep_tl_args is None:
+            vep_tl_args = {}
+        if vep_gl_args is None:
+            vep_gl_args = {}
 
         self.dataloaders = {}
+        self.gene_expression_variables = gene_expression_variables
         self.gene_expression_subtissues = gene_expression_subtissues
+        self.vep_tl_args = vep_tl_args
+        self.vep_gl_args = vep_gl_args
+        self.genotype_query = genotype_query
 
         self.expression_query = expression_query
-        self.expression_vep_join = expression_vep_join
+        # self.expression_vep_join = expression_vep_join
 
         # setup genotype
         gt_array = desmi.genotype.Genotype(path=gt_array_path)
@@ -80,8 +93,13 @@ class REPGeneLevelDL:
             vep_anno=vep_anno,
             gt_fetcher=gt_fetcher,
             variables=vep_variables,
+            genotype_query=genotype_query,
+            **vep_tl_args,
         )
-        vep_gl_agg = VEPGeneLevelVariantAggregator(vep_tl_agg)
+        vep_gl_agg = VEPGeneLevelVariantAggregator(
+            vep_tl_agg,
+            **vep_gl_args
+        )
         self.dataloaders["vep"] = vep_gl_agg
 
         gene_expression_fetcher = GeneExpressionFetcher(
