@@ -164,6 +164,9 @@ def test_rep_gl_dl_iter(rep_gl_dl):
     for b in rep_gl_dl.iter():
         assert isinstance(b, dict)
 
+        # stop after first batch
+        break
+
 
 def test_rep_gl_dl_train_iter(rep_gl_dl, gene):
     for b in rep_gl_dl.train_iter():
