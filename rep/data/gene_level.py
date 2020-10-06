@@ -116,7 +116,7 @@ class REPGeneLevelDL:
             # add gene expression to batch
             batch_df = batch_df.join(expression, how="left")
             # add vep to batch
-            batch_df = batch_df.join(vep, how="left")
+            batch_df = batch_df.join(vep["input"], how="left")
             batch_df = batch_df.reorder_levels(order=["subtissue", "gene", "sample_id"])
 
             batch = {
@@ -125,6 +125,9 @@ class REPGeneLevelDL:
                 "sample_id": self.sample_ids,
                 "index": index,
                 "input": batch_df,
+                "metadata": {
+                    "vep": vep["metadata"],
+                }
             }
             yield batch
 

@@ -146,8 +146,9 @@ class VEPTranscriptLevelVariantAggregator:
         grouped = vep_csq.join(gt_df).groupby(["GT", "gene", "feature", "sample_id"])
 
         # calculate size metadata
-        size = grouped.agg("size")
+        size = grouped.agg("size").unstack("GT")[["heterozygous", "homozygous"]]
         retval["metadata"]["size"] = size
+
         if self.metadata_transformer is not None:
             if isinstance(self.metadata_transformer, dict):
                 for k, v in self.metadata_transformer:
@@ -167,6 +168,7 @@ class VEPTranscriptLevelVariantAggregator:
         agg = agg.astype("float32")
 
         retval = {
+            "gene": [gene],
             "input": agg,
             "metadata": {
                 "size": size,
@@ -188,14 +190,31 @@ class VEPGeneLevelVariantAggregator:
             self.gtex_tp = gtex_tp
 
     def agg_gene_level(self, gene, subtissue=None):
-        transcript_level_df = self.vep_tl_aggr[gene]
+        if isinstance(subtissue, str):
+            subtissue = [subtissue]
+
+        transcript_level_batch = self.vep_tl_aggr[gene]
         max_transcript_df = self.gtex_tp.get_canonical_transcript(gene=gene, subtissue=subtissue)
         max_transcript_df = pd.DataFrame(dict(feature=max_transcript_df)).set_index("feature", append=True)
 
-        gene_level_df = max_transcript_df.join(transcript_level_df)
-        gene_level_df = gene_level_df.droplevel("feature")
+        retval = {
+            "gene": [gene],
+            "subtissue": subtissue,
+            "metadata": {
+            }
+        }
 
-        return gene_level_df
+        gene_level_df = max_transcript_df.join(transcript_level_batch["input"], how="inner")
+        gene_level_df = gene_level_df.droplevel("feature")
+        retval["input"] = gene_level_df
+
+        size = max_transcript_df.join(transcript_level_batch["metadata"]["size"], how="inner")
+        size = size.droplevel("feature")
+        retval["metadata"]["size"] = size
+
+        retval["index"] = retval["input"].index
+
+        return retval
 
     def __getitem__(self, selection):
         return self.agg_gene_level(**selection)
