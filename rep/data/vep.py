@@ -131,53 +131,97 @@ class VEPTranscriptLevelVariantAggregator:
 
     #         }
 
-    def agg_transcript_level(self, gene, flatten_cols=True) -> Union[Dict[str, object], None]:
+    def schema(self) -> pd.DataFrame:
+        """
+        Returns an empty dataframe with the expected schema of the output
+        """
+        index = [
+            # "subtissue",
+            "gene",
+            "feature",
+            "sample_id",
+        ]
+        columns = [
+            "gene",
+            "feature",
+            "sample_id",
+            *[".".join(["heterozygous", key, agg]) for key, value in self.variables.items() for agg in value],
+            *[".".join(["homozygous", key, agg]) for key, value in self.variables.items() for agg in value],
+        ]
+        dtype = {
+            "gene": str,
+            "feature": str,
+            "sample_id": str,
+            **{".".join(["heterozygous", key, agg]): "float32"
+               for key, value in self.variables.items() for agg in value},
+            **{".".join(["homozygous", key, agg]): "float32"
+               for key, value in self.variables.items() for agg in value},
+        }
+
+        retval = pd.DataFrame(columns=columns)
+        retval = retval.astype(dtype)
+        retval = retval.set_index(index)
+
+        return retval
+
+    def agg_transcript_level(self, gene) -> pd.DataFrame:
         agg_functions = self.aggregation_functions
 
         variants = self.get_variants_for_gene(gene)
         gt_df = self.get_gt_df(variants)
         if gt_df.empty:
-            return None
-        vep_csq = self.get_vep_csq(gene=gene, variants=variants)
+            vep_csq = self.schema()
+        else:
+            vep_csq = self.get_vep_csq(gene=gene, variants=variants)
 
-        retval = {
-            "metadata": {
-            }
-        }
+        # retval = {
+        #     "metadata": {
+        #     }
+        # }
 
         grouped = vep_csq.join(gt_df).groupby(["GT", "gene", "feature", "sample_id"])
 
-        # calculate size metadata
-        size = grouped.agg("size").unstack("GT").loc[:, ["heterozygous", "homozygous"]]
-        retval["metadata"]["size"] = size
-
-        if self.metadata_transformer is not None:
-            if isinstance(self.metadata_transformer, dict):
-                for k, v in self.metadata_transformer:
-                    retval["metadata"][k] = v(grouped)
-            else:
-                return ValueError("Dictionary of functions expected!")
+        # # calculate size metadata
+        # size = grouped.agg("size").unstack("GT").loc[:, ["heterozygous", "homozygous"]]
+        # retval["metadata"]["size"] = size
+        #
+        # if self.metadata_transformer is not None:
+        #     if isinstance(self.metadata_transformer, dict):
+        #         for k, v in self.metadata_transformer:
+        #             retval["metadata"][k] = v(grouped)
+        #     else:
+        #         return ValueError("Dictionary of functions expected!")
 
         agg = grouped.agg(agg_functions)
-        agg = agg.unstack("GT")
-        agg = agg.loc[:, agg.columns.to_frame().query("GT != 'reference'").index]
 
-        if flatten_cols:
-            # flatten multiindex: concatenate levels with '.'
-            agg.columns = [".".join(c) for c in agg.columns.to_list()]
+        to_join = {
+            'heterozygous': agg.query("GT == 'heterozygous'").droplevel("GT"),
+            'homozygous': agg.query("GT == 'homozygous'").droplevel("GT"),
+        }
+        agg = pd.concat(to_join.values(), axis=1, keys=to_join.keys(), join="outer")
+
+        # # --- old method that does not preserve schema on empty df:
+        # agg = agg.unstack("GT")
+        # agg = agg.loc[:, agg.columns.to_frame().query("GT != 'reference'").index]
+        # # ---
+
+        # flatten multiindex: concatenate levels with '.'
+        agg.columns = [".".join(c) for c in agg.columns.to_list()]
 
         # cast to float
         agg = agg.astype("float32")
+        agg = agg.reorder_levels(["gene", "feature", "sample_id"])
 
-        retval = {
-            # "gene": [gene],
-            "index": agg.index,
-            "input": agg,
-            "metadata": {
-                "size": size,
-            }
-        }
-        return retval
+        # retval = {
+        #     # "gene": [gene],
+        #     # "index": agg.index,
+        #     "input": agg,
+        #     "metadata": {
+        #         "size": size,
+        #     }
+        # }
+        # return retval
+        return agg
 
     def __getitem__(self, gene):
         if isinstance(gene, str):
@@ -185,6 +229,7 @@ class VEPTranscriptLevelVariantAggregator:
 
 
 class VEPGeneLevelVariantAggregator:
+
     def __init__(self, vep_tl_aggr: VEPTranscriptLevelVariantAggregator, gtex_tp: GTExTranscriptProportions = None):
         self.vep_tl_aggr = vep_tl_aggr
         if gtex_tp is None:
@@ -192,7 +237,39 @@ class VEPGeneLevelVariantAggregator:
         else:
             self.gtex_tp = gtex_tp
 
-    def agg_gene_level(self, gene, subtissue=None) -> Union[Dict[str, object], None]:
+    def schema(self) -> pd.DataFrame:
+        """
+        Returns an empty dataframe with the expected schema of the output
+        """
+        tl_schema = self.vep_tl_aggr.schema()
+        index = [
+            "subtissue",
+            "gene",
+            # "feature",
+            "sample_id",
+        ]
+        columns = [
+            "subtissue",
+            "gene",
+            # "feature",
+            "sample_id",
+            *tl_schema.columns
+        ]
+        dtype = {
+            "subtissue": str,
+            "gene": str,
+            # "feature": str,
+            "sample_id": str,
+            **tl_schema.dtypes
+        }
+
+        retval = pd.DataFrame(columns=columns)
+        retval = retval.astype(dtype)
+        retval = retval.set_index(index)
+
+        return retval
+
+    def agg_gene_level(self, gene, subtissue=None) -> pd.DataFrame:
         if isinstance(subtissue, str):
             subtissue = [subtissue]
 
@@ -203,24 +280,26 @@ class VEPGeneLevelVariantAggregator:
         max_transcript_df = self.gtex_tp.get_canonical_transcript(gene=gene, subtissue=subtissue)
         max_transcript_df = pd.DataFrame(dict(feature=max_transcript_df)).set_index("feature", append=True)
 
-        retval = {
-            # "gene": [gene],
-            # "subtissue": subtissue,
-            "metadata": {
-            }
-        }
+        # retval = {
+        #     # "gene": [gene],
+        #     # "subtissue": subtissue,
+        #     "metadata": {
+        #     }
+        # }
 
-        gene_level_df = max_transcript_df.join(transcript_level_batch["input"], how="inner")
+        # gene_level_df = max_transcript_df.join(transcript_level_batch["input"], how="inner")
+        gene_level_df = max_transcript_df.join(transcript_level_batch, how="inner")
         gene_level_df = gene_level_df.droplevel("feature")
-        retval["input"] = gene_level_df
+        gene_level_df = gene_level_df.reorder_levels(["subtissue", "gene", "sample_id"])
+        # retval["input"] = gene_level_df
 
-        size = max_transcript_df.join(transcript_level_batch["metadata"]["size"], how="inner")
-        size = size.droplevel("feature")
-        retval["metadata"]["size"] = size
+        # size = max_transcript_df.join(transcript_level_batch["metadata"]["size"], how="inner")
+        # size = size.droplevel("feature")
+        # retval["metadata"]["size"] = size
 
-        retval["index"] = retval["input"].index
+        # retval["index"] = retval["input"].index
 
-        return retval
+        return gene_level_df
 
     def __getitem__(self, selection):
         return self.agg_gene_level(**selection)
