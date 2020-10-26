@@ -170,8 +170,11 @@ class VEPTranscriptLevelVariantAggregator:
         agg_functions = self.aggregation_functions
 
         variants = self.get_variants_for_gene(gene)
-        gt_df = self.get_gt_df(variants)
+        if variants.empty:
+            # no known variants in selection; just return empty dataframe
+            return self.schema
 
+        gt_df = self.get_gt_df(variants)
         if gt_df.empty:
             # no variants in selection; just return empty dataframe
             return self.schema
