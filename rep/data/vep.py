@@ -1,6 +1,7 @@
 import os
 import sys
 from typing import Callable, Dict, Union
+import warnings
 
 import pandas as pd
 import numpy as np
@@ -29,7 +30,7 @@ class VEPTranscriptLevelVariantAggregator:
         'abs_min': lambda c: c.abs().min(),
         'abs_mean': lambda c: c.abs().mean(),
         'abs_median': lambda c: c.abs().median(),
-        'pval_max_significant': lambda c: np.fmin(- np.log(np.nanmin(c)), 30),
+        'pval_max_significant': lambda c: np.fmin(- np.log(np.nanmin(c.astype("float64"))), 30),
     }
 
     def __init__(
@@ -131,6 +132,7 @@ class VEPTranscriptLevelVariantAggregator:
 
     #         }
 
+    @cached_property
     def schema(self) -> pd.DataFrame:
         """
         Returns an empty dataframe with the expected schema of the output
@@ -169,17 +171,19 @@ class VEPTranscriptLevelVariantAggregator:
 
         variants = self.get_variants_for_gene(gene)
         gt_df = self.get_gt_df(variants)
+
         if gt_df.empty:
-            vep_csq = self.schema()
-        else:
-            vep_csq = self.get_vep_csq(gene=gene, variants=variants)
+            # no variants in selection; just return empty dataframe
+            return self.schema
+
+        vep_csq = self.get_vep_csq(gene=gene, variants=variants)
 
         # retval = {
         #     "metadata": {
         #     }
         # }
 
-        grouped = vep_csq.join(gt_df).groupby(["GT", "gene", "feature", "sample_id"])
+        grouped = vep_csq.join(gt_df, how="inner").groupby(["GT", "gene", "feature", "sample_id"])
 
         # # calculate size metadata
         # size = grouped.agg("size").unstack("GT").loc[:, ["heterozygous", "homozygous"]]
@@ -192,7 +196,10 @@ class VEPTranscriptLevelVariantAggregator:
         #     else:
         #         return ValueError("Dictionary of functions expected!")
 
-        agg = grouped.agg(agg_functions)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            with np.errstate(divide='ignore', invalid='ignore'):
+                agg = grouped.agg(agg_functions)
 
         to_join = {
             'heterozygous': agg.query("GT == 'heterozygous'").droplevel("GT"),
@@ -223,9 +230,25 @@ class VEPTranscriptLevelVariantAggregator:
         # return retval
         return agg
 
-    def __getitem__(self, gene):
-        if isinstance(gene, str):
-            return self.agg_transcript_level(gene=gene)
+    def align(self, index: pd.MultiIndex, how="left"):
+        gene = index.unique("gene")
+
+        retval = [self.agg_transcript_level(gene=g) for g in gene]
+        retval = pd.concat(retval, axis=0)
+
+        index_df = pd.DataFrame(index=index)
+        retval = index_df.join(retval, how=how)
+
+        return retval
+
+    def __getitem__(self, index):
+        if isinstance(index, str):
+            return self.agg_transcript_level(gene=index)
+        else:
+            return pd.concat(
+                [self.agg_transcript_level(gene=g) for g in index],
+                axis=0
+            )
 
 
 class VEPGeneLevelVariantAggregator:
@@ -237,11 +260,12 @@ class VEPGeneLevelVariantAggregator:
         else:
             self.gtex_tp = gtex_tp
 
+    @cached_property
     def schema(self) -> pd.DataFrame:
         """
         Returns an empty dataframe with the expected schema of the output
         """
-        tl_schema = self.vep_tl_aggr.schema()
+        tl_schema = self.vep_tl_aggr.schema
         index = [
             "subtissue",
             "gene",
@@ -269,13 +293,13 @@ class VEPGeneLevelVariantAggregator:
 
         return retval
 
-    def agg_gene_level(self, gene, subtissue=None) -> pd.DataFrame:
+    def agg_gene_level(self, gene, subtissue) -> pd.DataFrame:
         if isinstance(subtissue, str):
             subtissue = [subtissue]
 
         transcript_level_batch = self.vep_tl_aggr[gene]
-        if transcript_level_batch is None:
-            return None
+        # if transcript_level_batch is None:
+        #     return None
 
         max_transcript_df = self.gtex_tp.get_canonical_transcript(gene=gene, subtissue=subtissue)
         max_transcript_df = pd.DataFrame(dict(feature=max_transcript_df)).set_index("feature", append=True)
@@ -300,6 +324,18 @@ class VEPGeneLevelVariantAggregator:
         # retval["index"] = retval["input"].index
 
         return gene_level_df
+
+    def align(self, index: pd.MultiIndex, how="left"):
+        gene = index.unique("gene")
+        subtissue = index.unique("subtissue")
+
+        retval = [self.agg_gene_level(gene=g, subtissue=subtissue) for g in gene]
+        retval = pd.concat(retval, axis=0)
+
+        index_df = pd.DataFrame(index=index)
+        retval = index_df.join(retval, how=how)
+
+        return retval
 
     def __getitem__(self, selection):
         return self.agg_gene_level(**selection)

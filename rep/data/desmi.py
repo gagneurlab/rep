@@ -161,8 +161,9 @@ class GTExTranscriptProportions:
 
     """
 
-    def __init__(self, db_conn=None):
+    def __init__(self, db_conn=None, db_conn_factory=desmi.database.create_engine_from_url):
         self.db_conn = desmi.database.get_db_conn(db_conn)
+        self.db_conn_factory = db_conn_factory
 
     @cached_property
     def genes(self):
@@ -312,3 +313,19 @@ class GTExTranscriptProportions:
         (xrds,) = xr.align(xrds, indexes={"subtissue": subtissues})
 
         return xrds
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+
+        state["db_url"] = state['db_conn'].url
+        del state['db_conn']
+        return state
+
+    def __setstate__(self, state):
+        # Restore db connection
+        db_conn_factory = state["db_conn_factory"]
+        state["db_conn"] = db_conn_factory(state["db_url"])
+        del state["db_url"]
+
+        # Restore instance attributes
+        self.__dict__.update(state)

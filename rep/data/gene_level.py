@@ -123,9 +123,14 @@ class REPGeneLevelDL:
     # def target_tissues(self):
     #     return self.expression_xrds.subtissue.values
 
-    def get(self, gene):
+    def get(self, index: pd.MultiIndex):
+        gene = index.unique("gene")
+        sample_id = index.unique("sample_id")
+        subtissue = index.unique("subtissue")
+
         # this loads a dataframe of multiple target tissues
-        vep = self.dataloaders.get("vep")[dict(gene=gene, subtissue=self.target_tissues)]
+        # vep = self.dataloaders.get("vep")[dict(gene=gene, subtissue=self.target_tissues)]
+        vep = self.dataloaders.get("vep")[dict(gene=gene, subtissue=subtissue)]
         if vep is None:
             return None
 
@@ -137,39 +142,40 @@ class REPGeneLevelDL:
         expression.columns = [".".join(c) for c in expression.columns.to_list()]
         # add to batch
 
-        for t in self.target_tissues:
-            if not self.is_expressed(gene, t):
-                continue
+        # for t in subtissue:
+        # if not self.is_expressed(gene, t):
+        #     continue
 
-            index = pd.MultiIndex.from_product(
-                [[t], [gene], self.sample_ids],
-                names=["subtissue", "gene", "sample_id"]
-            )
-            batch_df = pd.DataFrame(index=index)
+        # index = pd.MultiIndex.from_product(
+        #     [[t], [gene], self.sample_ids],
+        #     names=["subtissue", "gene", "sample_id"]
+        # )
+        batch_df = pd.DataFrame(index=index)
 
-            # add gene expression to batch
-            batch_df = batch_df.join(expression, how="left")
-            # add vep to batch
-            batch_df = batch_df.join(vep["input"], how="left")
-            # batch_df = batch_df.join(vep["input"].assign(vep_missing=-1), how="left")
-            # batch_df.loc[:, "vep_missing"] = (batch_df["vep_missing"].fillna(0) + 1).astype(bool)
-            batch_df = batch_df.reorder_levels(order=["subtissue", "gene", "sample_id"])
+        # add gene expression to batch
+        batch_df = batch_df.join(expression, how="left")
+        # add vep to batch
+        batch_df = batch_df.join(vep, how="left")
+        # batch_df = batch_df.join(vep["input"].assign(vep_missing=-1), how="left")
+        # batch_df.loc[:, "vep_missing"] = (batch_df["vep_missing"].fillna(0) + 1).astype(bool)
+        batch_df = batch_df.reorder_levels(order=["subtissue", "gene", "sample_id"])
 
-            batch = {
-                # "gene": [gene],
-                # "subtissue": [t],
-                # "sample_id": self.sample_ids,
-                # "index": index,
-                "inputs": batch_df,
-                "metadata": {
-                    "index": batch_df.index,
-                    "vep": vep["metadata"],
-                    "vep_present": batch_df.index.isin(
-                        vep["input"].index.reorder_levels(order=["subtissue", "gene", "sample_id"])
-                    ),
-                }
-            }
-            yield batch
+        # batch = {
+        #     # "gene": [gene],
+        #     # "subtissue": [t],
+        #     # "sample_id": self.sample_ids,
+        #     # "index": index,
+        #     "inputs": batch_df,
+        #     "metadata": {
+        #         "index": batch_df.index,
+        #         "vep": vep["metadata"],
+        #         "vep_present": batch_df.index.isin(
+        #             vep["input"].index.reorder_levels(order=["subtissue", "gene", "sample_id"])
+        #         ),
+        #     }
+        # }
+        # yield batch
+        return batch_df
 
     def __getitem__(self, selection):
         return self.get(**selection)
