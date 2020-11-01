@@ -49,7 +49,7 @@ def roc_plot(y_trues, y_preds: list, labels=None, add_random_shuffle=False, lege
     if add_random_shuffle:
         roc_curve(np.random.choice(y_true, len(y_true)), label="random shuffle", formatting=formatting)
 
-    # Custom settings for the plot 
+    # Custom settings for the plot
     plt.plot([0, 1], [0, 1], 'r--')
     # plt.grid()
     plt.xlabel('False Positive Rate FP/TN+FP')
@@ -66,13 +66,18 @@ def roc_plot(y_trues, y_preds: list, labels=None, add_random_shuffle=False, lege
     return plt.gcf()
 
 
-def precision_recall_curve(y_true, y_pred, label, formatting='%s (auc = %0.2f%%)'):
+def precision_recall_curve(y_true, y_pred, label, formatting='%s (auc = %0.2f%%)', type="step", where="post"):
     # Compute precision and recall
     precision, recall, thresholds = metrics.precision_recall_curve(y_true=y_true, probas_pred=y_pred)
     # Calculate Area under the curve to display on the plot
     auc = metrics.auc(recall, precision)
     # Now, plot the computed values
-    plt.plot(recall, precision, label=formatting % (label, 100 * auc))
+    if type == "step":
+        plt.step(recall, precision, label=formatting % (label, 100 * auc), where=where)
+    elif type == "line":
+        plt.plot(recall, precision, label=formatting % (label, 100 * auc))
+    else:
+        raise ValueError("Unknown curve type %s" % type)
 
 
 def precision_recall_plot(y_trues, y_preds, labels=None, add_random_shuffle=True, legend_pos="inside"):
@@ -132,7 +137,7 @@ def tp_at_k(observed, score):
     return df
 
 
-def tp_at_k_curve(y_true, y_pred, label, formatting='%s (auc = %0.2f%%)', y_true_sum=None):
+def tp_at_k_curve(y_true, y_pred, label, formatting='%s (auc = %0.2f%%)', y_true_sum=None, type="step", where="post"):
     if not y_true_sum:
         y_true_sum = np.asarray(np.sum(y_true))
 
@@ -142,6 +147,12 @@ def tp_at_k_curve(y_true, y_pred, label, formatting='%s (auc = %0.2f%%)', y_true
     auc = metrics.auc(df["k"] / len(y_true), df["n_true"] / y_true_sum)
     # Now, plot the computed values
     plt.plot(df["k"], df["n_true"], label=formatting % (label, 100 * auc))
+    if type == "step":
+        plt.step(df["k"], df["n_true"], label=formatting % (label, 100 * auc), where=where)
+    elif type == "line":
+        plt.plot(df["k"], df["n_true"], label=formatting % (label, 100 * auc))
+    else:
+        raise ValueError("Unknown curve type %s" % type)
 
 
 def tp_at_k_plot(y_trues, y_preds, labels=None, add_random_uniform=False, legend_pos="inside"):
@@ -223,8 +234,8 @@ def density_scatter(
         g = density_scatter(
             x=m.predicted.values,
             y=m.zscore.values,
-            ylab='z-score (difference to mean)\nlung', 
-            xlab='prediction score\nlung', 
+            ylab='z-score (difference to mean)\nlung',
+            xlab='prediction score\nlung',
             jointgrid_kwargs=dict(
                 xlim=[-10, 10], # x-axis limits
                 ylim=[-10, 10], # x-axis limits
