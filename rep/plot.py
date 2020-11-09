@@ -219,6 +219,7 @@ def density_scatter(
         marker_linewidth=0,
         marker_colornorm=None,
         rasterized=True,
+        interpolate_density=False,
         normalize_density=True,
         kde=False,
         scatter_kwargs=None,
@@ -260,20 +261,30 @@ def density_scatter(
     # keep data as pandas series for axis labels (!)
     x: pd.Series = xy[xlab]
     y: pd.Series = xy[ylab]
+
     # calculate 2D histogram
     data, x_e, y_e = np.histogram2d(x, y, bins=bins)
-    # interpolate every point based on the distance to the neighbouring bin
-    z: np.ndarray = interpn(
-        (
-            0.5 * (x_e[1:] + x_e[:-1]),
-            0.5 * (y_e[1:] + y_e[:-1])
-        ),
-        data,
-        xy,
-        method="splinef2d",
-        bounds_error=False,
-        fill_value=0
-    )
+
+    if interpolate_density:
+        # interpolate every point based on the distance to the neighbouring bin
+        z: np.ndarray = interpn(
+            (
+                0.5 * (x_e[1:] + x_e[:-1]),
+                0.5 * (y_e[1:] + y_e[:-1])
+            ),
+            data,
+            xy,
+            method="splinef2d",
+            bounds_error=False,
+            fill_value=0
+        )
+    else:
+        z = np.array([
+            data[
+                np.argmax(a <= x_e[1:]),
+                np.argmax(b<=y_e[1:])
+            ] for a,b in zip(x,y)
+        ])
 
     if normalize_density:
         # normalize minimal value to 1, especially important for logarithmic color scale
@@ -323,7 +334,7 @@ def density_scatter(
 
     # create the JointGrid
     g = sns.JointGrid(x=x, y=y, **combined_jointgrid_kwargs)
-    g = g.plot_marginals(sns.distplot, **combined_distplot_kwargs)
+    g = g.plot_marginals(sns.histplot, **combined_distplot_kwargs)
     # hack to get the correct coordinates set in plt.scatter
     g.x = x
     g.y = y
@@ -334,3 +345,4 @@ def density_scatter(
     cbar_ax = g.fig.add_axes([.85, .25, .05, .4])  # x, y, width, height
     plt.colorbar(cax=cbar_ax)
     return g
+
