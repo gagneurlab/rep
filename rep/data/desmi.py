@@ -110,7 +110,8 @@ class DesmiGTFetcher:
 
         if "GT" in variable:
             if "AC" in variable:
-                retval["AC"] = retval.GT.sum(dim="sample_id")
+                # sum all heterozygous + 2x homozygous genotypes
+                retval["AC"] = ((retval.GT == 1) + 2 * (retval.GT == 2)).sum(dim="sample_id")
 
                 if "AF" in variable:
                     retval["AF"] = retval.AC / (retval.dims["sample_id"] * 2)
