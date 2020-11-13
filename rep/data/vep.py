@@ -86,7 +86,7 @@ class VEPTranscriptLevelVariantAggregator:
         vep_csq["variant"] = pd.DataFrame({
             "variant": desmi.objects.Variant(vep_csq[["chrom", "start", "end", "ref", "alt"]],
                                              sanitize=False).to_records()
-        }).variant  # directly assigning the variant records does not work due to some bug in Pandas
+        }, index=vep_csq.index).variant  # directly assigning the variant records does not work due to some bug in Pandas
         vep_csq = vep_csq.drop(columns=[
             "chrom",
             "start",
