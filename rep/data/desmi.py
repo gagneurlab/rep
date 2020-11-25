@@ -89,7 +89,7 @@ class DesmiGTFetcher:
     def __init__(self, gt_array: desmi.genotype.Genotype):
         self.gt_array = gt_array
 
-    def get(self, variant: desmi.objects.Variant, variable=["GT", "GQ", "DP", "AC", "AF", "private"]) -> xr.Dataset:
+    def get(self, variant: desmi.objects.Variant, variable=["GT", "GQ", "DP", "AC", "AF", "PC", "private"]) -> xr.Dataset:
         gt_array = self.gt_array
 
         retval = xr.Dataset(
@@ -115,9 +115,12 @@ class DesmiGTFetcher:
 
                 if "AF" in variable:
                     retval["AF"] = retval.AC / (retval.dims["sample_id"] * 2)
-            if "private" in variable:
-                # check if there is at max. one individual that has the variant
-                retval["private"] = ((retval.GT == 1) + (retval.GT == 2)).sum(dim="sample_id") == 1
+
+            if "PC" in variable:
+                retval["PC"] = ((retval.GT == 1) + (retval.GT == 2)).sum(dim="sample_id")
+                if "private" in variable:
+                    # check if there is at max. one individual that has the variant
+                    retval["private"] = retval.PC == 1
 
         return retval
 
