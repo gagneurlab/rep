@@ -180,41 +180,41 @@ class REPGeneLevelDL:
     def __getitem__(self, selection):
         return self.get(**selection)
 
-    def iter(self, genes=None):
-        if genes is None:
-            genes = self.genes
-        for gene in genes:
-            for batch in self.get(gene):
-                if batch is None:
-                    continue
-                yield batch
+    # def iter(self, genes=None):
+    #     if genes is None:
+    #         genes = self.genes
+    #     for gene in genes:
+    #         for batch in self.get(gene):
+    #             if batch is None:
+    #                 continue
+    #             yield batch
 
-    def train_iter(self, genes: List[str] = None, target_variable="zscore"):
-        if genes is None:
-            genes = self.genes
-        for gene in genes:
-            batch_iter = self.get(gene)
-            if batch_iter is None:
-                continue
-            for batch in batch_iter:
-                targets = self.expression_xrds[[target_variable, "missing"]].sel(
-                    gene=batch["metadata"]["index"].unique("gene"),
-                    subtissue=batch["metadata"]["index"].unique("subtissue"),
-                    sample_id=batch["metadata"]["index"].unique("sample_id"),
-                ).to_dataframe()
-                targets = targets.query("~ missing")[target_variable]
-                # target = expression.query(self.expression_query, engine="python")
-                #             expression, vep = expression.align(vep, axis=0, join=self.expression_vep_join)
-                #             batch = {
-                #                 "expression": expression,
-                #                 "vep": vep
-                #             }
-
-                # align to batch index
-
-                targets, inputs = targets.align(batch["inputs"], join="inner", axis=0)
-                batch["inputs"] = inputs
-                batch["targets"] = targets
-                batch["metadata"]["index"] = targets.index
-
-                yield batch
+    # def train_iter(self, genes: List[str] = None, target_variable="zscore"):
+    #     if genes is None:
+    #         genes = self.genes
+    #     for gene in genes:
+    #         batch_iter = self.get(gene)
+    #         if batch_iter is None:
+    #             continue
+    #         for batch in batch_iter:
+    #             targets = self.expression_xrds[[target_variable, "missing"]].sel(
+    #                 gene=batch["metadata"]["index"].unique("gene"),
+    #                 subtissue=batch["metadata"]["index"].unique("subtissue"),
+    #                 sample_id=batch["metadata"]["index"].unique("sample_id"),
+    #             ).to_dataframe()
+    #             targets = targets.query("~ missing")[target_variable]
+    #             # target = expression.query(self.expression_query, engine="python")
+    #             #             expression, vep = expression.align(vep, axis=0, join=self.expression_vep_join)
+    #             #             batch = {
+    #             #                 "expression": expression,
+    #             #                 "vep": vep
+    #             #             }
+    #
+    #             # align to batch index
+    #
+    #             targets, inputs = targets.align(batch["inputs"], join="inner", axis=0)
+    #             batch["inputs"] = inputs
+    #             batch["targets"] = targets
+    #             batch["metadata"]["index"] = targets.index
+    #
+    #             yield batch

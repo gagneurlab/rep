@@ -54,7 +54,7 @@ def vep_tl_agg(vep_anno, gt_fetcher):
 
 def test_VEPTranscriptLevelVariantAggregator(vep_tl_agg, gene):
     agg = vep_tl_agg.agg_transcript_level(gene)
-    schema = vep_tl_agg.schema()
+    schema = vep_tl_agg.schema
     assert isinstance(agg, pd.DataFrame)
     assert agg.dtypes.equals(schema.dtypes)
     assert agg.index.names == schema.index.names
@@ -85,7 +85,7 @@ def vep_gl_agg(vep_tl_agg):
 
 def test_vep_gl_agg(vep_gl_agg, gene):
     agg = vep_gl_agg.agg_gene_level(gene, subtissue="Whole Blood")
-    schema = vep_gl_agg.schema()
+    schema = vep_gl_agg.schema
     assert isinstance(agg, pd.DataFrame)
     assert agg.dtypes.equals(schema.dtypes)
     assert agg.index.names == schema.index.names
@@ -162,31 +162,37 @@ def rep_gl_dl():
 
 
 def test_rep_gl_dl(rep_gl_dl, gene):
-    for b in rep_gl_dl.get(gene):
+    index = pd.MultiIndex.from_product([
+        rep_gl_dl.target_tissues,
+        [gene],
+        rep_gl_dl.sample_ids],
+        names=["subtissue", "gene", "sample_id"]
+    )
+    for b in rep_gl_dl.get(index):
         pass
 
 
-def test_rep_gl_dl_iter(rep_gl_dl):
-    for b in rep_gl_dl.iter():
-        assert isinstance(b, dict)
-
-        # stop after first batch
-        break
-
-
-def test_rep_gl_dl_train_iter(rep_gl_dl):
-    for b in rep_gl_dl.train_iter():
-        assert isinstance(b, dict)
-        assert b["target"]["missing"].notnull().all()
-
-        # stop after first batch
-        break
-
-
-def test_rep_gl_dl_train_iter_gene(rep_gl_dl, gene):
-    for b in rep_gl_dl.train_iter(genes=["ENSG00000000003"]):
-        assert isinstance(b, dict)
-        assert b["target"]["missing"].notnull().all()
+# def test_rep_gl_dl_iter(rep_gl_dl):
+#     for b in rep_gl_dl.iter():
+#         assert isinstance(b, dict)
+#
+#         # stop after first batch
+#         break
+#
+#
+# def test_rep_gl_dl_train_iter(rep_gl_dl):
+#     for b in rep_gl_dl.train_iter():
+#         assert isinstance(b, dict)
+#         assert b["target"]["missing"].notnull().all()
+#
+#         # stop after first batch
+#         break
+#
+#
+# def test_rep_gl_dl_train_iter_gene(rep_gl_dl, gene):
+#     for b in rep_gl_dl.train_iter(genes=["ENSG00000000003"]):
+#         assert isinstance(b, dict)
+#         assert b["target"]["missing"].notnull().all()
 
 
 def test_vep_gl_dl(vep_gl_agg):
