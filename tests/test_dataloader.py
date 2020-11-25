@@ -187,3 +187,14 @@ def test_rep_gl_dl_train_iter_gene(rep_gl_dl, gene):
     for b in rep_gl_dl.train_iter(genes=["ENSG00000000003"]):
         assert isinstance(b, dict)
         assert b["target"]["missing"].notnull().all()
+
+
+def test_vep_gl_dl(vep_gl_agg):
+    vep_gl_agg.agg_gene_level(
+        gene=['ENSG00000280355'],
+        subtissue=['Lung',
+                   'Brain - Cerebellum',
+                   'Skin - Sun Exposed (Lower leg)',
+                   'Artery - Tibial',
+                   'Adipose - Subcutaneous']
+    )
