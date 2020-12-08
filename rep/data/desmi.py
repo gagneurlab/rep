@@ -89,15 +89,19 @@ class DesmiGTFetcher:
     def __init__(self, gt_array: desmi.genotype.Genotype):
         self.gt_array = gt_array
 
-    def get(self, variant: desmi.objects.Variant, variable=["GT", "GQ", "DP", "AC", "AF", "PC", "private"]) -> xr.Dataset:
+    def get(self, variant: desmi.objects.Variant,
+            variable=["GT", "GQ", "DP", "AC", "AF", "PC", "private"]) -> xr.Dataset:
         gt_array = self.gt_array
+
+        attrs = [v for v in variable if v in {"GT", "GQ", "DP"}]
+        arrays = gt_array.get(var=variant, attr=attrs)
 
         retval = xr.Dataset(
             data_vars={
-                v: xr.DataArray(
-                    gt_array.get(var=variant, path=v),
+                k: xr.DataArray(
+                    v,
                     dims=("variant", "sample_id"),
-                ) for v in variable if v in {"GT", "GQ", "DP"}
+                ) for k, v in zip(attrs, arrays)
             },
             coords={
                 "variant": (("variant",), variant.to_records()),
