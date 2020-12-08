@@ -38,6 +38,7 @@ class VEPTranscriptLevelVariantAggregator:
             vep_anno,
             gt_fetcher,
             variables=None,
+            variable_dtypes=None,
             metadata_transformer: Dict[str, Callable] = None,
             genotype_query="(GQ >= 80) & (DP >= 4) & (AF < 0.01)"
     ):
@@ -56,6 +57,19 @@ class VEPTranscriptLevelVariantAggregator:
             }
         else:
             self.variables = variables
+
+        if variable_dtypes is None:
+            self.variable_dtypes = {
+                **{c: "bool" for c in self.vep_anno.consequences},
+                'cadd_raw': "float32",
+                'cadd_phred': "float32",
+                'polyphen_score': "float32",
+                'condel_score': "float32",
+                'sift_score': "float32",
+                'maxentscan_diff': "float32",
+            }
+        else:
+            self.variable_dtypes = variable_dtypes
 
         self.metadata_transformer = metadata_transformer
         self.genotype_query = genotype_query
@@ -186,7 +200,10 @@ class VEPTranscriptLevelVariantAggregator:
         #     }
         # }
 
-        grouped = vep_csq.join(gt_df, how="inner").groupby(["GT", "gene", "feature", "sample_id"])
+        joined = vep_csq.join(gt_df, how="inner")
+        dtypes = {c: self.variable_dtypes[c] for c in joined.columns if c in self.variable_dtypes}
+        joined = joined.astype(dtypes)
+        grouped = joined.groupby(["GT", "gene", "feature", "sample_id"])
 
         # # calculate size metadata
         # size = grouped.agg("size").unstack("GT").loc[:, ["heterozygous", "homozygous"]]
