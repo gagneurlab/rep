@@ -100,7 +100,8 @@ class VEPTranscriptLevelVariantAggregator:
         vep_csq["variant"] = pd.DataFrame({
             "variant": desmi.objects.Variant(vep_csq[["chrom", "start", "end", "ref", "alt"]],
                                              sanitize=False).to_records()
-        }, index=vep_csq.index).variant  # directly assigning the variant records does not work due to some bug in Pandas
+        },
+            index=vep_csq.index).variant  # directly assigning the variant records does not work due to some bug in Pandas
         vep_csq = vep_csq.drop(columns=[
             "chrom",
             "start",
@@ -180,7 +181,7 @@ class VEPTranscriptLevelVariantAggregator:
 
         return retval
 
-    def agg_transcript_level(self, gene) -> pd.DataFrame:
+    def agg_transcript_level(self, gene, variant_batch_size=10000) -> pd.DataFrame:
         agg_functions = self.aggregation_functions
 
         variants = self.get_variants_for_gene(gene)
@@ -188,7 +189,13 @@ class VEPTranscriptLevelVariantAggregator:
             # no known variants in selection; just return empty dataframe
             return self.schema
 
-        gt_df = self.get_gt_df(variants)
+        partial_gt_df = []
+        for _, df in variants.df.groupby(np.arange(len(variants.df)) // variant_batch_size):
+            gt_df_batch = self.get_gt_df(desmi.objects.Variant(df, sanitize=False))
+            partial_gt_df.append(gt_df_batch)
+        gt_df = pd.concat(partial_gt_df, axis=0)
+
+        #         gt_df = self.get_gt_df(variants)
         if gt_df.empty:
             # no variants in selection; just return empty dataframe
             return self.schema
