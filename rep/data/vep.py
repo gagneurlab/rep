@@ -200,7 +200,8 @@ class VEPTranscriptLevelVariantAggregator:
             # no variants in selection; just return empty dataframe
             return self.schema
 
-        vep_csq = self.get_vep_csq(gene=gene, variants=variants)
+        gt_variants = desmi.objects.Variant.from_records(gt_df.index.unique("variant"))
+        vep_csq = self.get_vep_csq(gene=gene, variants=gt_variants)
 
         # retval = {
         #     "metadata": {
