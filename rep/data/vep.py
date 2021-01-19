@@ -211,7 +211,7 @@ class VEPTranscriptLevelVariantAggregator:
         joined = vep_csq.join(gt_df, how="inner")
         dtypes = {c: self.variable_dtypes[c] for c in joined.columns if c in self.variable_dtypes}
         joined = joined.astype(dtypes)
-        grouped = joined.groupby(["GT", "gene", "feature", "sample_id"])
+        grouped = joined.groupby(["GT", "gene", "feature", "sample_id"], observed=True)
 
         # # calculate size metadata
         # size = grouped.agg("size").unstack("GT").loc[:, ["heterozygous", "homozygous"]]
