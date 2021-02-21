@@ -69,10 +69,7 @@ def set_cpu_count_env(n_cpu=joblib.cpu_count()):
         os.environ[var] = str(n_cpu)
 
 
-def init_ray(adjust_env=True):
-    if adjust_env:
-        set_cpu_count_env()
-
+def init_ray(adjust_env=True, n_cpu=joblib.cpu_count()):
     import ray
 
     spill_dir = os.path.join(os.environ["TMPDIR"], "ray_spill")
@@ -105,6 +102,9 @@ def init_ray(adjust_env=True):
     if adjust_env:
         # make sure that OMP_NUM_THREADS, etc. is set to 1 on all workers
         ray.worker.global_worker.run_function_on_all_workers(lambda x: set_cpu_count_env(n_cpu=1))
+        # set number of threads in main process' env variables
+        set_cpu_count_env(n_cpu)
+
 
     return ray.cluster_resources()
 
