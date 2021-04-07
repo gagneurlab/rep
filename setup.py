@@ -13,24 +13,11 @@ requirements = [
     "matplotlib",
     "numpy",
     "pandas",
-    "toolz",
-    "cloudpickle",
-    "kipoi",
-    "kipoiseq",
-    "argh",
-    "papermill",
-    "nbconvert",
-    "python-dotenv",
-    "comet_ml",  # deprecate ?
-    "vdom",
-    "gin-config",
-    "gin-train",
     "pyarrow",
 ]
 
 test_requirements = [
     "pytest",
-    "virtualenv",
 ]
 
 
@@ -38,9 +25,9 @@ setup(
     name='rep',
     version='0.0.1',
     description="rep: RNA Expression prediction",
-    author="Ziga Avsec",
-    author_email='avsec@in.tum.de',
-    url='https://i12g-gagneurweb.informatik.tu-muenchen.de/gitlab/gagneurlab/REP',
+    author="Florian Hölzlwimmer",
+    author_email='git.ich@frhoelzlwimmer.de',
+    url='https://gitlab.cmm.in.tum.de/gagneurlab/REP',
     long_description="rep: toolkit for seq2seq models in genomics",
     packages=find_packages(),
     install_requires=requirements,
