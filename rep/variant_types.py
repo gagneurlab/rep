@@ -1388,20 +1388,21 @@ class VariantArray(ExtensionArray):
 
 
 def test_variantdtype():
-    var = Variant("chr1", 10, 11, "A", "G")
+    var1 = Variant("chr1", 10, 11, "A", "G")
+    var2 = Variant("chr1", 12, 15, "AAT", "C")
 
-    var_array = VariantArray([var, var, None])
-    assert len(var_array) == 3
+    var_array = VariantArray([var1, var1, var2, None])
+    assert len(var_array) == 4
 
     scalar = var_array[0]
     assert isinstance(scalar, Variant)
-    assert scalar == var
+    assert scalar == var1
 
     var_array.isna()
     np.asarray(var_array)
     var_array.as_frame()
     # TODO: proper test values
-    assert len(var_array.unique()) == 2
+    assert len(var_array.unique()) == 3
 
     str(var_array)
 
@@ -1422,3 +1423,7 @@ def test_variantdtype():
 
     df2 = pd.DataFrame({"vc": var_array})
     df.set_index("vc").join(df2.set_index("vc"))
+
+    # df["vc"].values.to_vcf_str() # 'chrom:pos:ref>alt'
+    # VariantArray.from_vcf_str('chrom:pos:ref>alt')
+    # df["vc"].values.chrom # np.array(str)
