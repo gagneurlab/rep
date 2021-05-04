@@ -12,12 +12,35 @@ import sys
 
 
 __all__ = (
+    "notebook_logger",
     "memory_limit",
     "MEMORY_LIMIT",
     "set_cpu_count_env",
     "init_ray",
     "init_dask",
 )
+
+
+def notebook_logger(name, log_file):
+    import logging
+
+    log = logging.getLogger(name)
+    log.setLevel(logging.DEBUG)
+
+    file_handler = logging.FileHandler(filename=log_file, mode='a')
+    formatter = logging.Formatter('[%(asctime)s] {%(filename)s:%(lineno)d} %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    file_handler.setLevel(logging.DEBUG)
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setFormatter(formatter)
+    stdout_handler.setLevel(logging.INFO)
+
+    log.addHandler(file_handler)
+    log.addHandler(stdout_handler)
+    log.propagate = False
+
+    return log
 
 
 def memory_limit():
@@ -78,12 +101,17 @@ def init_ray(adjust_env=True, n_cpu=joblib.cpu_count()):
     except:
         pass
 
+
+    if adjust_env:
+        # ensure initialization of workers' env variables with one core
+        set_cpu_count_env(n_cpu=1)
+
     # Start Ray.
     # Tip: If you're connecting to an existing cluster, use ray.init(address="auto").
     ray.init(
         _memory=MEMORY_LIMIT * 0.7,
         object_store_memory=MEMORY_LIMIT * 0.3,
-        num_cpus=joblib.cpu_count(),
+        num_cpus=n_cpu,
         _temp_dir=os.environ["TMPDIR"],
         _system_config={
             "automatic_object_spilling_enabled": True,
@@ -92,12 +120,16 @@ def init_ray(adjust_env=True, n_cpu=joblib.cpu_count()):
             )
         },
     )
+    if adjust_env:
+        # reset env variables with one core
+        set_cpu_count_env(n_cpu=n_cpu)
 
     from ray.util.dask import ray_dask_get
     from ray.util.joblib import register_ray
     register_ray()
 
     dask.config.set(scheduler=ray_dask_get)
+    ray.worker.global_worker.run_function_on_all_workers(lambda args: dask.config.set(scheduler=ray_dask_get))
 
     if adjust_env:
         def adjust_worker_env_fn(args):
