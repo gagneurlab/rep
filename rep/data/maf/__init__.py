@@ -1,0 +1,1 @@
+from .rocksdb_maf import VariantMafDB

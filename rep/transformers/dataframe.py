@@ -12,15 +12,12 @@ except ImportError:
     # python < 3.8
     from backports.cached_property import cached_property
 
-import desmi
-from rep.data.desmi import GTExTranscriptProportions
-
-
 __all__ = [
     "PandasTransformer",
     "LambdaTransformer",
     "Aggregator",
 ]
+
 
 def _clear_checks(schema: Union[pdt.DataFrameSchema, pdt.SeriesSchema], inplace=False):
     if not inplace:
@@ -45,7 +42,7 @@ class PandasTransformer(metaclass=abc.ABCMeta):
 
     @property
     @abc.abstractmethod
-    def schema(self, *args, **kwargs) -> Union[pdt.SeriesSchema, pdt.DataFrameSchema]:
+    def schema(self) -> Union[pdt.SeriesSchema, pdt.DataFrameSchema]:
         raise NotImplementedError
 
     @abc.abstractmethod

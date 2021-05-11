@@ -1,8 +1,22 @@
 from __future__ import annotations
 
 import operator
-from typing import TYPE_CHECKING, Type, Union, TypeVar, Tuple, List, NamedTuple, Iterable, Sequence, Dict
+import typing
+from typing import (
+    TYPE_CHECKING,
+    Type,
+    Union,
+    TypeVar,
+    Tuple,
+    List,
+    NamedTuple,
+    Iterable,
+    Sequence,
+    Dict,
+    Mapping
+)
 
+import collections
 import dataclasses
 
 import re
@@ -15,6 +29,8 @@ from pandas.api.extensions import (
     ExtensionArray,
 )
 from pandas.core.construction import extract_array
+
+# if TYPE_CHECKING:
 import pyarrow as pa
 
 import logging
@@ -23,13 +39,16 @@ log = logging.getLogger(__name__)
 
 VariantArrayT = TypeVar("VariantArrayT", bound="VariantArray")
 
+_VCF_SPLIT_PATTERN = re.compile(":|>")
+_VARIANT_SPLIT_PATTERN = re.compile(":|-|>")
+
 
 @dataclasses.dataclass
-class Variant(object):
+class Variant:  # (Mapping):
     """
     Dataclass to represent a genomic Variant.
 
-    It stores the following properties:
+    Attributes:
         - chrom: chromosome name
         - start: variant start (0-based, inclusive)
         - end: variant end (1-based, exclusive)
@@ -41,10 +60,15 @@ class Variant(object):
     __slots__ = "chrom", "start", "end", "ref", "alt"
 
     chrom: str
+    "chromosome name"
     start: int
+    "variant start (0-based, inclusive)"
     end: int
+    "end: variant end (1-based, exclusive)"
     ref: str
+    "reference sequence"
     alt: str
+    "alternative sequence"
 
     def __init__(self, chrom, start, end, ref, alt):
         """
@@ -57,8 +81,8 @@ class Variant(object):
         :param alt: alternative sequence
         """
         self.chrom = str(chrom)
-        self.start = int(start)
-        self.end = int(end)
+        self.start = int(start) if start is not None else -1
+        self.end = int(end) if end is not None else -1
         self.ref = str(ref)
         self.alt = str(alt)
 
@@ -125,10 +149,34 @@ class Variant(object):
             - ref: reference sequence
             - alt: alternative sequence
         """
-        return (self.chrom, self.start, self.end, self.ref, self.alt)
+        return (self.chrom, self.pos, self.ref, self.alt)
 
-    def as_dict(self) -> Dict[str, Union[str, int]]:
-        return self.__dict__
+    # def __getitem__(self, key):
+    #     return getattr(self, key)
+    #
+    # def __setitem__(self, key, value):
+    #     setattr(self, key, value)
+    #
+    # def __len__(self):
+    #     return len(self.__slots__)
+    #
+    # def __iter__(self):
+    #     for f in self.__slots__:
+    #         yield self[f]
+    #
+    # def keys(self):
+    #     return collections.KeysView(self.__slots__)
+    #
+    # def items(self):
+    #     for attribute in self.__slots__:
+    #         yield attribute, getattr(self, attribute)
+
+    def __copy__(self):
+        return Variant.from_tuple(self.as_tuple())
+
+    # def is_normalized(self) -> bool:
+    #
+    # def left_normalize(self) -> Variant:
 
     @property
     def pos(self) -> np.ndarray[np.int32]:
@@ -160,6 +208,27 @@ class Variant(object):
         return f"{self.chrom}:{self.pos}:{self.ref}>{self.alt}"
 
     @classmethod
+    def from_vcf_str(cls, value: str) -> Variant:
+        """
+        Create variant array from string representation
+
+        :param value: string representation of variant(s) in the form 'chr:pos:ref>alt'
+        :return: Variant array
+        """
+        # split into array of [chr, pos, ref, alt] records
+        chrom, pos, ref, alt = re.split(_VCF_SPLIT_PATTERN, value)
+
+        # return new Variant object
+        return Variant.from_vcf(chrom, pos, ref, alt)
+
+    def to_str(self) -> str:
+        """
+        Convert variant array to string representation in the form 'chr:pos:ref>alt'
+        :return: Pandas series of strings
+        """
+        return f"{self.chrom}:{self.start}-{self.end}:{self.ref}>{self.alt}"
+
+    @classmethod
     def from_str(cls, value: str) -> Variant:
         """
         Create variant array from string representation
@@ -168,86 +237,53 @@ class Variant(object):
         :return: Variant array
         """
         # split into array of [chr, pos, ref, alt] records
-        chrom, pos, ref, alt = value.split(":|>")
+        chrom, start, end, ref, alt = re.split(_VARIANT_SPLIT_PATTERN, value)
 
         # return new Variant object
-        return Variant.from_vcf(chrom, pos, ref, alt)
+        return Variant(chrom, start, end, ref, alt)
 
     def __repr__(self):
-        return f"Variant('{self.to_vcf_str()}')"
+        return f"Variant('{self.to_str()}')"
 
     def __hash__(self):
         return hash((self.chrom, self.pos, self.ref, self.alt))
 
+    def _cmp_method(self, other: Variant, op):
+        return op(self.as_tuple(), other.as_tuple())
+
     def __eq__(self, other):
         if isinstance(other, Variant):
-            return (
-                    (self.chrom == other.chrom) &
-                    (self.start == other.start) &
-                    (self.end == other.end) &
-                    (self.ref == other.ref) &
-                    (self.alt == other.alt)
-            )
+            return self._cmp_method(other, operator.eq)
         else:
             return False
 
     def __ne__(self, other):
         if isinstance(other, Variant):
-            return (
-                    (self.chrom != other.chrom) |
-                    (self.start != other.start) |
-                    (self.end != other.end) |
-                    (self.ref != other.ref) |
-                    (self.alt != other.alt)
-            )
+            return self._cmp_method(other, operator.ne)
         else:
             return True
 
     def __gt__(self, other):
         if isinstance(other, Variant):
-            return not (
-                    (self.chrom <= other.chrom) &
-                    (self.start <= other.start) &
-                    (self.end <= other.end) &
-                    (self.ref <= other.ref) &
-                    (self.alt <= other.alt)
-            )
+            return self._cmp_method(other, operator.gt)
         else:
             raise TypeError(f"Cannot compare {type(self)} with {type(other)}")
 
     def __ge__(self, other):
         if isinstance(other, Variant):
-            return not (
-                    (self.chrom < other.chrom) &
-                    (self.start < other.start) &
-                    (self.end < other.end) &
-                    (self.ref < other.ref) &
-                    (self.alt < other.alt)
-            )
+            return self._cmp_method(other, operator.ge)
         else:
             raise TypeError(f"Cannot compare {type(self)} with {type(other)}")
 
     def __lt__(self, other):
         if isinstance(other, Variant):
-            return not (
-                    (self.chrom >= other.chrom) &
-                    (self.start >= other.start) &
-                    (self.end >= other.end) &
-                    (self.ref >= other.ref) &
-                    (self.alt >= other.alt)
-            )
+            return self._cmp_method(other, operator.lt)
         else:
             raise TypeError(f"Cannot compare {type(self)} with {type(other)}")
 
     def __le__(self, other):
         if isinstance(other, Variant):
-            return not (
-                    (self.chrom > other.chrom) &
-                    (self.start > other.start) &
-                    (self.end > other.end) &
-                    (self.ref > other.ref) &
-                    (self.alt > other.alt)
-            )
+            return self._cmp_method(other, operator.le)
         else:
             raise TypeError(f"Cannot compare {type(self)} with {type(other)}")
 
@@ -379,18 +415,27 @@ class VariantArray(ExtensionArray):
     """
     Array representation of a list of Variant objects.
 
-    Internally, stores the variants in a column-based representation:
-        - _chrom: array of chromosome names
-        - _start: array of variant starts (0-based, inclusive)
-        - _end: array of variant ends (1-based, exclusive)
-        - _ref: array of reference sequences
-        - _alt: array of alternative sequences
+    Internally, stores the variants in a column-based representation.
+
+    Attributes:
+        - chrom: array of chromosome names
+        - start: array of variant starts (0-based, inclusive)
+        - end: array of variant ends (1-based, exclusive)
+        - ref: array of reference sequences
+        - alt: array of alternative sequences
+
+    In addition, can be converted from/to VCF-formatted (chrom, pos, ref, alt) representations.
     """
     _chrom: np.ndarray[str]
+    "chromosome name"
     _start: np.ndarray[np.int32]
+    "variant start (0-based, inclusive)"
     _end: np.ndarray[np.int32]
+    "end: variant end (1-based, exclusive)"
     _ref: np.ndarray[str]
+    "reference sequence"
     _alt: np.ndarray[str]
+    "alternative sequence"
 
     na_value = pd.NA
 
@@ -620,6 +665,45 @@ class VariantArray(ExtensionArray):
         ).fillna(pd.NA)
 
     @classmethod
+    def from_vcf_str(cls, value: Union[str, Iterable[str]]) -> VariantArrayT:
+        """
+        Create variant array from string representation
+
+        :param value: string representation of variant(s) in the form 'chr:pos:ref>alt'
+        :return: Variant array
+        """
+        if np.ndim(value) < 1:
+            value = [value]
+
+        # split into VCF-like dataframe of [chr, pos, ref, alt]
+        vcf_df = (
+            pd.Series(value, dtype=pd.StringDtype())
+                .str.split(_VCF_SPLIT_PATTERN.pattern, expand=True)
+        )
+        vcf_df.columns = ["chrom", "pos", "ref", "alt"]
+        vcf_df["pos"] = vcf_df["pos"].astype(pd.Int32Dtype()).fillna(0)
+
+        # return new Variant object
+        return VariantArray.from_vcf_df(vcf_df)
+
+    def to_str(self) -> pd.Series[str]:
+        """
+        Convert variant array to string representation in the form 'chr:pos:ref>alt'
+        :return: Pandas series of strings
+        """
+        return (
+                self.chrom +
+                ":" +
+                self.start.astype(str) +
+                "-" +
+                self.end.astype(str) +
+                ":" +
+                self.ref +
+                ">" +
+                self.alt
+        ).fillna(pd.NA)
+
+    @classmethod
     def from_str(cls, value: Union[str, Iterable[str]]) -> VariantArrayT:
         """
         Create variant array from string representation
@@ -630,19 +714,17 @@ class VariantArray(ExtensionArray):
         if np.ndim(value) < 1:
             value = [value]
 
-        # split into array of [chr, pos, ref, alt] records
-        split_series = pd.Series(value).str.split(":|>")
-
-        # convert splitted records into VCF-like dataframe
-        vcf_df = pd.DataFrame.from_records(
-            split_series,
-            columns=["chrom", "pos", "ref", "alt"],
-        ).astype({
-            "pos": int
-        })
+        # split into dataframe of [chr, start, end, ref, alt]
+        variant_df = (
+            pd.Series(value, dtype=pd.StringDtype())
+                .str.split(_VARIANT_SPLIT_PATTERN.pattern, expand=True)
+        )
+        variant_df.columns = ["chrom", "start", "end", "ref", "alt"]
+        variant_df["start"] = variant_df["start"].astype(pd.Int32Dtype()).fillna(-1)
+        variant_df["end"] = variant_df["end"].astype(pd.Int32Dtype()).fillna(-1)
 
         # return new Variant object
-        return VariantArray.from_vcf_df(vcf_df)
+        return VariantArray.from_df(variant_df)
 
     @property
     def chrom(self) -> pd.Index[pd.StringDtype]:
@@ -752,13 +834,15 @@ class VariantArray(ExtensionArray):
         if isinstance(value, Variant):
             return value.as_tuple()
         elif isinstance(value, tuple):
-            chrom, start, end, ref, alt = tuple
+            chrom, start, end, ref, alt = value
         elif isinstance(value, dict):
             chrom = value["chrom"]
             start = value["start"]
             end = value["end"]
             ref = value["ref"]
             alt = value["alt"]
+        elif isinstance(value, str):
+            return Variant.from_str(value).as_tuple()
         elif pd.isna(value):
             chrom = None
             start = -1
@@ -1179,7 +1263,7 @@ class VariantArray(ExtensionArray):
         dtype = pd.api.types.pandas_dtype(dtype)
 
         if pd.api.types.is_string_dtype(dtype):
-            return pd.array(self.to_vcf_str(), dtype=dtype)
+            return pd.array(self.to_str(), dtype=dtype)
         elif dtype == VariantDtype or dtype == Variant:
             if copy:
                 return self.copy()
@@ -1198,7 +1282,7 @@ class VariantArray(ExtensionArray):
     def value_counts(self, dropna=False):
         return pd.value_counts(np.asarray(self), dropna=dropna).astype("Int64")
 
-    def _cmp_method(self, other, op, fail_on_missing=True):
+    def _cmp_method(self, other, op, fail_on_missing=False):
         # ensure pandas array for list-like and eliminate non-variant scalars
         if pd.api.types.is_list_like(other):
             if len(self) != len(other):
@@ -1242,66 +1326,39 @@ class VariantArray(ExtensionArray):
                         (self._alt != other.alt) &
                         ~ (pd.isna(self) == pd.isna(other))  # return false if both values are NA
                 )
-            elif op is operator.gt:
-                retval = ~ (
-                        (self._chrom <= other.chrom) &
-                        (self._start <= other.start) &
-                        (self._end <= other.end) &
-                        (self._ref <= other.ref) &
-                        (self._alt <= other.alt)
-                )
+            elif op in {
+                operator.gt,
+                operator.ge,
+                operator.lt,
+                operator.le,
+            }:
+                equal = np.stack([
+                    (self._chrom != other.chrom),
+                    (self._start != other.start),
+                    (self._end != other.end),
+                    (self._ref != other.ref),
+                    (self._alt != other.alt),
+                    # ~ (pd.isna(self) == pd.isna(other)), # return false if both values are NA
+                ])
+                first_false_value = np.argmin(equal, axis=0)
+                axis_idx = np.arange(len(first_false_value))
+
+                comp = np.stack([
+                    op(self._chrom, other.chrom),
+                    op(self._start, other.start),
+                    op(self._end, other.end),
+                    op(self._ref, other.ref),
+                    op(self._alt, other.alt),
+                    # ~ (pd.isna(self) == pd.isna(other)), # return false if both values are NA
+                ])
+                retval = comp[first_false_value, axis_idx]
+                # all_equal = equal[first_false_value, axis_idx]
+
                 any_of_both_missing = (pd.isna(self) | pd.isna(other))
                 if fail_on_missing:
                     if np.any(any_of_both_missing):
                         raise TypeError("boolean value of NA is ambiguous")
-                else:
-                    # return false if any of the values is NA
-                    return retval & ~any_of_both_missing
-            elif op is operator.ge:
-                retval = ~ (
-                        (self._chrom < other.chrom) &
-                        (self._start < other.start) &
-                        (self._end < other.end) &
-                        (self._ref < other.ref) &
-                        (self._alt < other.alt)
-                )
-                any_of_both_missing = (pd.isna(self) | pd.isna(other))
-                if fail_on_missing:
-                    if np.any(any_of_both_missing):
-                        raise TypeError("boolean value of NA is ambiguous")
-                else:
-                    # return false if any of the values is NA
-                    return retval & ~any_of_both_missing
-            elif op is operator.lt:
-                retval = ~ (
-                        (self._chrom >= other.chrom) &
-                        (self._start >= other.start) &
-                        (self._end >= other.end) &
-                        (self._ref >= other.ref) &
-                        (self._alt >= other.alt)
-                )
-                any_of_both_missing = (pd.isna(self) | pd.isna(other))
-                if fail_on_missing:
-                    if np.any(any_of_both_missing):
-                        raise TypeError("boolean value of NA is ambiguous")
-                else:
-                    # return false if any of the values is NA
-                    return retval & ~any_of_both_missing
-            elif op is operator.le:
-                retval = ~ (
-                        (self._chrom > other.chrom) &
-                        (self._start > other.start) &
-                        (self._end > other.end) &
-                        (self._ref > other.ref) &
-                        (self._alt > other.alt)
-                )
-                any_of_both_missing = (pd.isna(self) | pd.isna(other))
-                if fail_on_missing:
-                    if np.any(any_of_both_missing):
-                        raise TypeError("boolean value of NA is ambiguous")
-                else:
-                    # return false if any of the values is NA
-                    return retval & ~any_of_both_missing
+                return pd.arrays.BooleanArray(retval, mask=any_of_both_missing)
             else:
                 raise ValueError(f"Unknown op {op}")
         else:
@@ -1385,45 +1442,3 @@ class VariantArray(ExtensionArray):
 
     def __str__(self):
         return self.__repr__()
-
-
-def test_variantdtype():
-    var1 = Variant("chr1", 10, 11, "A", "G")
-    var2 = Variant("chr1", 12, 15, "AAT", "C")
-
-    var_array = VariantArray([var1, var1, var2, None])
-    assert len(var_array) == 4
-
-    scalar = var_array[0]
-    assert isinstance(scalar, Variant)
-    assert scalar == var1
-
-    var_array.isna()
-    np.asarray(var_array)
-    var_array.as_frame()
-    # TODO: proper test values
-    assert len(var_array.unique()) == 3
-
-    str(var_array)
-
-    assert all(pd.array(var_array) == var_array)
-    assert all(var_array.from_vcf_str(var_array.to_vcf_str()) == var_array)
-
-    assert all(var_array == var_array.sanitize())
-    assert isinstance(
-        pd.Series(var_array).astype(pd.StringDtype()).dtype,
-        pd.StringDtype
-    )
-
-    # TODO: setup tmpdir
-    tmpfile_path = "/tmp/test.pq"
-    df = pd.DataFrame({"vc": var_array, "s": 234})
-    df.to_parquet(tmpfile_path)
-    assert all(pd.read_parquet(tmpfile_path) == df)
-
-    df2 = pd.DataFrame({"vc": var_array})
-    df.set_index("vc").join(df2.set_index("vc"))
-
-    # df["vc"].values.to_vcf_str() # 'chrom:pos:ref>alt'
-    # VariantArray.from_vcf_str('chrom:pos:ref>alt')
-    # df["vc"].values.chrom # np.array(str)
