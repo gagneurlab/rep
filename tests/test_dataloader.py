@@ -8,7 +8,7 @@ GENE = "ENSG00000003402"
 
 from rep.data.variantdb import DesmiGTFetcher
 from rep.data.canonical_transcript import GTExTranscriptProportions
-from rep.data.gene_level import VEPGeneLevelVariantAggregator, VEPTranscriptLevelVariantAggregator, REPGeneLevelDL
+from rep.data import VEPGeneLevelVariantAggregator, VEPTranscriptLevelVariantAggregator
 
 
 @pytest.fixture()
