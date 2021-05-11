@@ -24,11 +24,21 @@ __all__ = [
 ]
 
 
-def _variant_array_to_desmi(variant):
-    desmi_variant = variant.as_frame()
-    desmi_variant = desmi_variant.assign(start=desmi_variant["start"] + 1)
-    desmi_variant = desmi.objects.Variant(desmi_variant)
-    return desmi_variant
+def _desmi_to_variantarray(desmi_variant: desmi.objects.Variant) -> VariantArray:
+    # make 0-based
+    df = desmi_variant.df
+    df = df.assign(start=df["start"] - 1)
+    return VariantArray.from_df(df)
+
+
+def _variantarray_to_desmi(variants: VariantArray) -> desmi.objects.Variant:
+    variants = VariantArray(variants)
+    desmi_variants = variants.as_frame()
+    # convert 0-based to 1-based
+    desmi_variants["start"] = desmi_variants["start"] + 1
+    desmi_variants = desmi.objects.Variant(desmi_variants, sanitize=False)
+
+    return desmi_variants
 
 
 class DesmiGTFetcher:
@@ -58,7 +68,7 @@ class DesmiGTFetcher:
             variant = variant[filter(variant)]
 
         # convert to desmi
-        desmi_variant = _variant_array_to_desmi(variant)
+        desmi_variant = _variantarray_to_desmi(variant)
 
         attrs = [v for v in variable if v in {"GT", "GQ", "DP"}]
         arrays = gt_array.get(var=desmi_variant, attr=attrs)
@@ -140,29 +150,12 @@ class DesmiVEPAnnotation(VEPAnnotation):
             columns={var: pdt.Column(VEP_DTYPES[var]) for var in self.vep_variables},
         )
 
-    @staticmethod
-    def _desmi_to_variantarray(desmi_variant: desmi.objects.Variant) -> VariantArray:
-        # make 0-based
-        df = desmi_variant.df
-        df = df.assign(start=df["start"] - 1)
-        return VariantArray.from_df(df)
-
-    @staticmethod
-    def _variantarray_to_desmi(variants: VariantArray) -> desmi.objects.Variant:
-        variants = pd.Series(variants, dtype="Variant")
-        desmi_variants = variants.array.as_frame()
-        # convert 0-based to 1-based
-        desmi_variants["start"] = desmi_variants["start"] + 1
-        desmi_variants = desmi.objects.Variant(desmi_variants)
-
-        return desmi_variants
-
     def get_variants(self, gene: Union[str, Iterable[str]]) -> VariantArray:
         desmi_variant = self.vep_anno.get_variants(feature=gene, feature_type="gene")
-        return self._desmi_to_variantarray(desmi_variant)
+        return _desmi_to_variantarray(desmi_variant)
 
     def __call__(self, variants: VariantArray, gene: Union[str, Iterable[str]]):
-        desmi_variants = self._variantarray_to_desmi(variants)
+        desmi_variants = _variantarray_to_desmi(variants)
 
         # get variables for provided gene and variants
         cols = [
@@ -187,8 +180,8 @@ class DesmiVEPAnnotation(VEPAnnotation):
         )
 
         # --- now set index to (gene, feature, variant)
-        vep_csq["variant"] = self._desmi_to_variantarray(
-            desmi.objects.Variant(vep_csq[["chrom", "start", "end", "ref", "alt"]])
+        vep_csq["variant"] = _desmi_to_variantarray(
+            desmi.objects.Variant(vep_csq[["chrom", "start", "end", "ref", "alt"]], sanitize=False)
         )
         vep_csq = vep_csq.drop(columns=[
             "chrom",
