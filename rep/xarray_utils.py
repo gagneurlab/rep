@@ -61,11 +61,9 @@ def core_dim_locs_from_cond(cond, new_dim_name, core_dims=None) -> List[Tuple[st
     return core_dim_locs_xr
 
 
-def subset_variable(variable, core_dim_locs, new_dim_name, mask=None):
+def subset_variable(variable: xr.DataArray, core_dim_locs, new_dim_name, mask=None):
     core_dims = np.array([dim for dim, locs in core_dim_locs])
     variable_core_dims = core_dims[np.isin(core_dims, variable.dims)]
-    if len(variable_core_dims) < len(core_dims):
-        return None
 
     other_dims = np.asarray(variable.dims)
     other_dims = other_dims[~np.isin(variable.dims, core_dims)]
@@ -93,9 +91,14 @@ def subset_variable(variable, core_dim_locs, new_dim_name, mask=None):
 def dataset_masked_indexing(ds: xr.Dataset, mask: xr.DataArray, new_dim_name: str):
     mask.data = dask.array.asanyarray(mask.data)
     core_dim_locs = core_dim_locs_from_cond(mask, new_dim_name=new_dim_name)
+    core_dims = np.array([dim for dim, locs in core_dim_locs])
 
     new_variables = {}
     for name, variable in ds.items():
+        variable_core_dims = core_dims[np.isin(core_dims, variable.dims)]
+        if len(variable_core_dims) < len(core_dims):
+            variable, _ = xr.broadcast(variable, mask)
+
         subset = subset_variable(variable, core_dim_locs, new_dim_name=new_dim_name, mask=mask.data)
         if subset is not None:
             new_variables[name] = subset
@@ -137,5 +140,5 @@ def test_ds_indexing():
     assert indexed_test_ds["missing"].all().compute().item()
     assert indexed_test_ds["missing"].sum().compute().item() == test_ds["missing"].sum().compute().item()
     assert indexed_test_ds["x"].dims == ("newdim",)
-    assert indexed_test_ds["y"].dims == ("dim_0", "dim_1",)
+    assert indexed_test_ds["y"].dims == ("newdim",)
     assert indexed_test_ds["missing"].dims == ("newdim",)
