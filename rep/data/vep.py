@@ -26,222 +26,6 @@ __all__ = [
     "VEPTranscriptLevelVariantAggregator"
 ]
 
-# class VEPVariantFetcher:
-#     functions = {
-#         'min': 'min',
-#         'mean': 'mean',
-#         'median': 'median',
-#         'max': 'max',
-#         'count': 'count',
-#         'sum': 'sum',
-#         'abs_max': lambda c: c.abs().max(),
-#         'abs_min': lambda c: c.abs().min(),
-#         'abs_mean': lambda c: c.abs().mean(),
-#         'abs_median': lambda c: c.abs().median(),
-#         'pval_max_significant': lambda c: np.fmin(- np.log(np.nanmin(c.astype("float64"))), 30),
-#     }
-#
-#     def __init__(
-#             self,
-#             vep_anno,
-#             gt_fetcher,
-#             vep_variables=None,
-#             genotype_query="(GQ >= 80) & (DP >= 4) & (AF < 0.01)"
-#     ):
-#         self.vep_anno = vep_anno
-#         self.gt_fetcher = gt_fetcher
-#
-#         pdt.DataFrameSchema()
-#
-#         if vep_variables is None:
-#             self.vep_variables = [
-#                 *[c for c in self.vep_anno.consequences],
-#                 'cadd_raw',
-#                 'cadd_phred',
-#                 'polyphen_score',
-#                 'condel_score',
-#                 'sift_score',
-#                 'maxentscan_diff',
-#             ]
-#         else:
-#             self.vep_variables = vep_variables
-#
-#         self.columns = [
-#             "gene",
-#             "feature",
-#             "sample_id",
-#             "variant",
-#             *self.vep_variables,
-#             "GT",
-#             "GQ",
-#             "DP",
-#             # "sample_idx",
-#             "AC",
-#             "AF",
-#             "PC",
-#             "private",
-#         ]
-#
-#         self.column_dtypes = {
-#             "gene": pd.StringDtype(),
-#             "feature": pd.StringDtype(),
-#             "sample_id": pd.StringDtype(),
-#             "variant": VariantDtype(),
-#             **{c: "bool" for c in self.vep_anno.consequences},
-#             'cadd_raw': "float32",
-#             'cadd_phred': "float32",
-#             'polyphen_score': "float32",
-#             'condel_score': "float32",
-#             'sift_score': "float32",
-#             'maxentscan_diff': "float32",
-#             "GT": pd.CategoricalDtype(categories=['reference', 'heterozygous', 'homozygous'], ordered=False),
-#             "GQ": "float64",
-#             "DP": "int64",
-#             "sample_idx": int,
-#             "AC": "int64",
-#             "AF": "float64",
-#             "PC": "int64",
-#             "private": bool,
-#         }
-#
-#         self.genotype_query = genotype_query
-#
-#     def get_vep_csq(self, gene, variants: Union[Variant, VariantArray] = None) -> pd.DataFrame:
-#         if variants is None:
-#             # fetch variants annotated by gene
-#             variants = self.get_variants_for_gene(gene)
-#
-#         # get variables for provided gene and variants
-#         cols = [
-#             "chrom",
-#             "start",
-#             "end",
-#             "ref",
-#             "alt",
-#             "feature",
-#             "gene",
-#             *self.vep_variables
-#         ]
-#
-#         vep_csq = self.vep_anno.get_columns(
-#             variants, columns=cols, feature=gene, feature_type="gene", aggregation=None, preserve_all_variants=False,
-#             escape_columns=True
-#         )
-#
-#         # --- now set index to (gene, feature, variant)
-#         vep_csq["variant"] = VariantArray.from_df(vep_csq[["chrom", "start", "end", "ref", "alt"]])
-#         vep_csq = vep_csq.drop(columns=[
-#             "chrom",
-#             "start",
-#             "end",
-#             "ref",
-#             "alt"
-#         ])
-#         vep_csq = vep_csq.set_index([
-#             "gene",
-#             "feature",
-#             "variant"
-#         ])
-#
-#         # --- result: (gene, feature, variant) -> (vep features*)
-#         return vep_csq
-#
-#     def get_variants_for_gene(self, gene):
-#         return VariantArray.from_df(self.vep_anno.get_variants(feature=gene, feature_type="gene").df)
-#
-#     def get_gt_df(self, variants: VariantArray):
-#         """
-#         get genotype dataframe for variants
-#         """
-#         gt_fetcher = self.gt_fetcher
-#         genotype_query = self.genotype_query
-#
-#         df: pd.DataFrame = gt_fetcher.to_dataframe(variants)
-#         df = df.query(genotype_query)
-#
-#         # result: (sample_id, variant) -> (GT, GQ, DP, AC, AF)
-#         return df
-#
-#     @cached_property
-#     def schema(self) -> pd.DataFrame:
-#         """
-#         Returns an empty dataframe with the expected schema of the output
-#         """
-#         index = [
-#             # "subtissue",
-#             "gene",
-#             "feature",
-#             "sample_id",
-#             "variant",
-#         ]
-#         columns = self.columns
-#         dtype = {c: self.column_dtypes[c] for c in columns}
-#
-#         retval = pd.DataFrame(columns=columns)
-#         retval = retval.astype(dtype)
-#         retval = retval.set_index(index)
-#
-#         return retval
-#
-#     # def get(self, gene, variant_batch_size=10000, drop_sample_idx=True) -> pd.DataFrame:
-#     #     variants = self.get_variants_for_gene(gene)
-#     #     if variants.df.empty:
-#     #         # no known variants in selection; just return empty dataframe
-#     #         return self.schema
-#     #
-#     #     partial_gt_df = []
-#     #     for _, df in variants.df.groupby(
-#     #             np.arange(len(variants.df)) // variant_batch_size
-#     #     ):
-#     #         gt_df_batch = self.get_gt_df(desmi.objects.Variant(df, sanitize=False))
-#     #         partial_gt_df.append(gt_df_batch)
-#     #     gt_df = pd.concat(partial_gt_df, axis=0)
-#     #
-#     #     #         gt_df = self.get_gt_df(variants)
-#     #     if gt_df.empty:
-#     #         # no variants in selection; just return empty dataframe
-#     #         return self.schema
-#     #
-#     #     gt_variants = desmi.objects.Variant.from_records(gt_df.index.unique("variant"))
-#     #     vep_csq = self.get_vep_csq(gene=gene, variants=gt_variants)
-#     #
-#     #     # retval = {
-#     #     #     "metadata": {
-#     #     #     }
-#     #     # }
-#     #
-#     #     joined = vep_csq.join(gt_df, how="inner")
-#     #     dtypes = {c: self.column_dtypes[c] for c in joined.columns if c in self.column_dtypes}
-#     #     joined = joined.astype(dtypes)
-#     #     joined = joined.drop(columns="sample_idx")
-#     #
-#     #     joined = joined.reset_index()
-#     #     joined["variant"] = desmi.objects.Variant.from_records(joined["variant"], sanitize=False).to_str()
-#     #     joined = joined.set_index(["gene", "feature", "sample_id", "variant"])
-#     #
-#     #     return joined.sort_index()
-#
-#     def align(self, index: pd.MultiIndex, how="left", **kwargs):
-#         gene = index.unique("gene")
-#
-#         retval = [self.get(gene=g, **kwargs) for g in gene]
-#         retval = pd.concat(retval, axis=0)
-#
-#         index_df = pd.DataFrame(index=index)
-#         retval = index_df.join(retval, how=how)
-#
-#         return retval
-#
-#     def __getitem__(self, index):
-#         if isinstance(index, str):
-#             return self.get(gene=index)
-#         else:
-#             return pd.concat(
-#                 [self.get(gene=g) for g in index],
-#                 axis=0
-#             )
-
-
 from rep.data.veff.vep import VEPAnnotation
 
 
@@ -333,7 +117,7 @@ class VEPTranscriptLevelVariantAggregator:
         df: pd.DataFrame = gt_fetcher.to_dataframe(variants)
         df = df.query(genotype_query)
 
-        # result: (sample_id, variant) -> (GT, GQ, DP, AC, AF)
+        # result: (individual, variant) -> (GT, GQ, DP, AC, AF)
         return df
 
     @cached_property
@@ -363,19 +147,19 @@ class VEPTranscriptLevelVariantAggregator:
             # "subtissue",
             "gene",
             "feature",
-            "sample_id",
+            "individual",
         ]
         columns = [
             "gene",
             "feature",
-            "sample_id",
+            "individual",
             *[".".join(["heterozygous", key, agg]) for key, value in self.variables.items() for agg in value],
             *[".".join(["homozygous", key, agg]) for key, value in self.variables.items() for agg in value],
         ]
         dtype = {
             "gene": pd.StringDtype(),
             "feature": pd.StringDtype(),
-            "sample_id": pd.StringDtype(),
+            "individual": pd.StringDtype(),
             **{".".join(["heterozygous", key, agg]): "float32"
                for key, value in self.variables.items() for agg in value},
             **{".".join(["homozygous", key, agg]): "float32"
@@ -420,7 +204,7 @@ class VEPTranscriptLevelVariantAggregator:
         joined = vep_csq.join(gt_df, how="inner")
         dtypes = {c: self.variable_dtypes[c] for c in joined.columns if c in self.variable_dtypes}
         joined = joined.astype(dtypes)
-        grouped = joined.groupby(["GT", "gene", "feature", "sample_id"], observed=True)
+        grouped = joined.groupby(["GT", "gene", "feature", "individual"], observed=True)
 
         # # calculate size metadata
         # size = grouped.agg("size").unstack("GT").loc[:, ["heterozygous", "homozygous"]]
@@ -454,7 +238,7 @@ class VEPTranscriptLevelVariantAggregator:
 
         # cast to float
         agg = agg.astype("float32")
-        agg = agg.reorder_levels(["gene", "feature", "sample_id"])
+        agg = agg.reorder_levels(["gene", "feature", "individual"])
 
         # retval = {
         #     # "gene": [gene],
@@ -511,20 +295,20 @@ class VEPGeneLevelVariantAggregator:
             "subtissue",
             "gene",
             # "feature",
-            "sample_id",
+            "individual",
         ]
         columns = [
             "subtissue",
             "gene",
             # "feature",
-            "sample_id",
+            "individual",
             *tl_schema.columns
         ]
         dtype = {
             "subtissue": pd.StringDtype(),
             "gene": pd.StringDtype(),
             # "feature": pd.StringDtype(),
-            "sample_id": pd.StringDtype(),
+            "individual": pd.StringDtype(),
             **tl_schema.dtypes
         }
 
@@ -555,7 +339,7 @@ class VEPGeneLevelVariantAggregator:
         # gene_level_df = max_transcript_df.join(transcript_level_batch["input"], how="inner")
         gene_level_df = max_transcript_df.join(transcript_level_batch, how="inner")
         gene_level_df = gene_level_df.droplevel("feature")
-        gene_level_df = gene_level_df.reorder_levels(["subtissue", "gene", "sample_id"])
+        gene_level_df = gene_level_df.reorder_levels(["subtissue", "gene", "individual"])
         # retval["input"] = gene_level_df
 
         # size = max_transcript_df.join(transcript_level_batch["metadata"]["size"], how="inner")

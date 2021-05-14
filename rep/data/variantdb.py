@@ -77,28 +77,28 @@ class DesmiGTFetcher:
             data_vars={
                 k: xr.DataArray(
                     v,
-                    dims=("variant", "sample_id"),
+                    dims=("variant", "individual"),
                 ) for k, v in zip(attrs, arrays)
             },
             coords={
                 "variant": (("variant",), np.asarray(variant)),
                 #                  "variant": (("variant",), variant.df.index),
                 #                  **{c: (("variant", ), v) for c, v in variant.df.items()},
-                "sample_id": (("sample_id",), gt_array.sample_anno.sample_id),
-                "sample_idx": (("sample_id",), gt_array.sample_anno.sample_idx),
+                "individual": (("individual",), gt_array.sample_anno.sample_id),
+                "sample_idx": (("individual",), gt_array.sample_anno.sample_idx),
             }
         )
 
         if "GT" in variable:
             if "AC" in variable:
                 # sum all heterozygous + 2x homozygous genotypes
-                retval["AC"] = ((retval.GT == 1) + 2 * (retval.GT == 2)).sum(dim="sample_id")
+                retval["AC"] = ((retval.GT == 1) + 2 * (retval.GT == 2)).sum(dim="individual")
 
                 if "AF" in variable:
-                    retval["AF"] = retval.AC / (retval.dims["sample_id"] * 2)
+                    retval["AF"] = retval.AC / (retval.dims["individual"] * 2)
 
             if "PC" in variable:
-                retval["PC"] = ((retval.GT == 1) + (retval.GT == 2)).sum(dim="sample_id")
+                retval["PC"] = ((retval.GT == 1) + (retval.GT == 2)).sum(dim="individual")
                 if "private" in variable:
                     # check if there is at max. one individual that has the variant
                     retval["private"] = retval.PC == 1
@@ -121,7 +121,7 @@ class DesmiGTFetcher:
         # .astype({
         #     "variant": "Variant",
         # })
-        # .set_index(["sample_id", "variant"])
+        # .set_index(["individual", "variant"])
 
         return retval
 
