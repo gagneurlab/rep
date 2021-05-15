@@ -84,7 +84,7 @@ class GTExTranscriptProportions:
             val_mean = val.mean(dim="subtissue")
 
             mean_canonical_transcript = val_mean.argmax(dim="transcript")
-            mean_canonical_transcript = val.transcript[mean_canonical_transcript]
+            mean_canonical_transcript = val.transcript[mean_canonical_transcript].item()
 
             # Replace NaN's with the mean expression proportion across tissues
             val = val.fillna(val_mean)
