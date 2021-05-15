@@ -327,7 +327,7 @@ class VEPGeneLevelVariantAggregator:
         #     return None
 
         max_transcript_df = self.gtex_tp.get_canonical_transcript(gene=gene, subtissue=subtissue)
-        max_transcript_df = pd.DataFrame(dict(feature=max_transcript_df)).set_index("feature", append=True)
+        max_transcript_df = max_transcript_df.rename("feature").to_frame().set_index("feature", append=True)
 
         # retval = {
         #     # "gene": [gene],
