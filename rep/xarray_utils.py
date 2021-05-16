@@ -61,24 +61,26 @@ def core_dim_locs_from_cond(cond, new_dim_name, core_dims=None) -> List[Tuple[st
     return core_dim_locs_xr
 
 
-def subset_variable(variable: xr.DataArray, core_dim_locs, new_dim_name, mask=None):
+def subset_variable(variable: xr.DataArray, core_dim_locs, new_dim_name, mask):
     core_dims = np.array([dim for dim, locs in core_dim_locs])
-    variable_core_dims = core_dims[np.isin(core_dims, variable.dims)]
+
+    variable, mask_bcast = xr.broadcast(variable, mask)
+    variable = variable.transpose(*core_dims, ...)
 
     other_dims = np.asarray(variable.dims)
     other_dims = other_dims[~np.isin(variable.dims, core_dims)]
 
-    variable_dim_order = np.concatenate([core_dims, other_dims])
+    flattened_mask = mask.data.flatten()
+    flattened_variable_data = dask.array.reshape(
+        variable.data,
+        shape=[*flattened_mask.shape, *[variable.sizes[d] for d in other_dims]]
+    )
 
-    variable = variable.transpose(*variable_dim_order)
+    subset = flattened_variable_data[flattened_mask]
 
-    if mask is None:
-        subset = dask.array.asanyarray(variable.data).vindex[tuple(idx.values for dim, idx in core_dim_locs)]
-    else:
-        subset = dask.array.asanyarray(variable.data)[mask]
-        # force-set chunk size from known chunks
-        chunk_sizes = core_dim_locs[0][1].chunks[0]
-        subset._chunks = (chunk_sizes, *subset._chunks[1:])
+    # force-set chunk size from known chunks
+    chunk_sizes = core_dim_locs[0][1].chunks[0]
+    subset._chunks = (chunk_sizes, *subset._chunks[1:])
 
     subset_xr = xr.DataArray(subset, dims=(new_dim_name, *other_dims), coords={
         **{dim: idx.coords[dim] for dim, idx in core_dim_locs},
@@ -95,15 +97,8 @@ def dataset_masked_indexing(ds: xr.Dataset, mask: xr.DataArray, new_dim_name: st
 
     new_variables = {}
     for name, variable in ds.items():
-        variable_core_dims = core_dims[np.isin(core_dims, variable.dims)]
-        if len(variable_core_dims) < len(core_dims):
-            variable, _ = xr.broadcast(variable, mask)
-
-        subset = subset_variable(variable, core_dim_locs, new_dim_name=new_dim_name, mask=mask.data)
-        if subset is not None:
-            new_variables[name] = subset
-        else:
-            new_variables[name] = variable
+        subset = subset_variable(variable, core_dim_locs, new_dim_name=new_dim_name, mask=mask)
+        new_variables[name] = subset
 
     return xr.Dataset(new_variables)
 
@@ -121,7 +116,7 @@ def test_array_indexing():
     new_dim_name = "newdim"
 
     core_dim_locs = core_dim_locs_from_cond(mask, new_dim_name=new_dim_name)
-    indexed_test_da = subset_variable(data, core_dim_locs, new_dim_name=new_dim_name, mask=mask.data)
+    indexed_test_da = subset_variable(data, core_dim_locs, new_dim_name=new_dim_name, mask=mask)
 
     assert indexed_test_da.all().compute().item()
     assert indexed_test_da.sum().compute().item() == test_ds["missing"].sum().compute().item()
@@ -130,6 +125,7 @@ def test_array_indexing():
 
 def test_ds_indexing():
     test_ds = xr.Dataset({
+        "a": xr.DataArray(dask.array.random.randint(0, 1000, size=[100, 100, 100, 2])),
         "x": xr.DataArray(dask.array.random.randint(0, 1000, size=[100, 100, 100])),
         "y": xr.DataArray(dask.array.random.randint(0, 1000, size=[100, 100])),
         "missing": xr.DataArray(dask.array.random.randint(0, 2, size=[100, 100, 100], dtype=bool)),
@@ -139,6 +135,18 @@ def test_ds_indexing():
 
     assert indexed_test_ds["missing"].all().compute().item()
     assert indexed_test_ds["missing"].sum().compute().item() == test_ds["missing"].sum().compute().item()
+    assert indexed_test_ds["a"].dims == ("newdim", "dim_3")
     assert indexed_test_ds["x"].dims == ("newdim",)
     assert indexed_test_ds["y"].dims == ("newdim",)
     assert indexed_test_ds["missing"].dims == ("newdim",)
+
+    ref_indexed_test_ds = test_ds.stack(newdim=["dim_0", "dim_1", "dim_2"])
+    ref_indexed_test_ds = ref_indexed_test_ds.isel(newdim=ref_indexed_test_ds["missing"])
+    ref_indexed_test_ds = ref_indexed_test_ds.compute()
+
+    all_is_equal = (indexed_test_ds == ref_indexed_test_ds).all().compute()
+
+    assert all_is_equal["a"].item()
+    assert all_is_equal["x"].item()
+    assert all_is_equal["y"].item()
+    assert all_is_equal["missing"].item()
