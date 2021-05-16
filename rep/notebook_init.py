@@ -181,3 +181,17 @@ def init_dask(adjust_env=True, lifetime_restart=False):
         client = dask.distributed.Client(cluster)
 
     return client
+
+def setup_plot_style():
+    import plotnine as pn
+    import matplotlib
+    import seaborn as sns
+
+    pn.themes.theme_set(pn.theme_bw)
+
+    matplotlib.style.use('seaborn')
+    matplotlib.rcParams['figure.dpi'] = 300
+    matplotlib.rcParams['figure.figsize'] = [12, 8]
+    matplotlib.rcParams["savefig.dpi"] = 450
+
+
