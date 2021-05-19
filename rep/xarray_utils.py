@@ -97,8 +97,9 @@ def dataset_masked_indexing(ds: xr.Dataset, mask: xr.DataArray, new_dim_name: st
 
     new_variables = {}
     for name, variable in ds.items():
-        subset = subset_variable(variable, core_dim_locs, new_dim_name=new_dim_name, mask=mask)
-        new_variables[name] = subset
+        if np.any(np.isin(variable.dims, core_dims)):
+            variable = subset_variable(variable, core_dim_locs, new_dim_name=new_dim_name, mask=mask)
+        new_variables[name] = variable
 
     return xr.Dataset(new_variables)
 
@@ -128,6 +129,7 @@ def test_ds_indexing():
         "a": xr.DataArray(dask.array.random.randint(0, 1000, size=[100, 100, 100, 2])),
         "x": xr.DataArray(dask.array.random.randint(0, 1000, size=[100, 100, 100])),
         "y": xr.DataArray(dask.array.random.randint(0, 1000, size=[100, 100])),
+        "z": xr.DataArray(dask.array.random.randint(0, 1000, size=[100, 100]), dims=("nodim_a", "nodim_b")),
         "missing": xr.DataArray(dask.array.random.randint(0, 2, size=[100, 100, 100], dtype=bool)),
     })
 
@@ -138,6 +140,7 @@ def test_ds_indexing():
     assert indexed_test_ds["a"].dims == ("newdim", "dim_3")
     assert indexed_test_ds["x"].dims == ("newdim",)
     assert indexed_test_ds["y"].dims == ("newdim",)
+    assert indexed_test_ds["z"].dims == ("nodim_a", "nodim_b")
     assert indexed_test_ds["missing"].dims == ("newdim",)
 
     ref_indexed_test_ds = test_ds.stack(newdim=["dim_0", "dim_1", "dim_2"])
