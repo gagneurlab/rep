@@ -51,12 +51,14 @@ class VEPTranscriptLevelVariantAggregator:
             variables=None,
             variable_dtypes=None,
             metadata_transformer: Dict[str, Callable] = None,
-            genotype_query="(GQ >= 80) & (DP >= 4) & (AF < 0.01)"
+            genotype_query="(GQ >= 80) & (DP >= 4) & (AF < 0.01)",
+            variant_batch_size=1000,
     ):
         if not isinstance(vep_anno, VEPAnnotation):
             raise ValueError("Invalid vep_anno passed: " + str(vep_anno))
         self.vep_anno = vep_anno
         self.gt_fetcher = gt_fetcher
+        self.variant_batch_size = variant_batch_size
 
         if variables is None:
             self.variables = {
@@ -172,7 +174,10 @@ class VEPTranscriptLevelVariantAggregator:
 
         return retval
 
-    def agg_transcript_level(self, gene, variant_batch_size=10000) -> pd.DataFrame:
+    def agg_transcript_level(self, gene, variant_batch_size=None) -> pd.DataFrame:
+        if variant_batch_size is None:
+            variant_batch_size = self.variant_batch_size
+
         agg_functions = self.aggregation_functions
 
         variants = self.get_variants_for_gene(gene)
