@@ -39,7 +39,7 @@ def core_dim_labels_from_mask(
         mask: xr.DataArray,
         new_dim_name: str,
         core_dims=None,
-        use_argwhere=True
+        use_argwhere=True,
 ) -> List[Tuple[str, xr.DataArray]]:
     if core_dims is None:
         core_dims = mask.dims
@@ -121,9 +121,11 @@ def subset_variable(variable: xr.DataArray, core_dim_labels, new_dim_name, mask)
     return subset_xr
 
 
-def dataset_masked_indexing(ds: xr.Dataset, mask: xr.DataArray, new_dim_name: str, use_argwhere=True):
+def dataset_masked_indexing(ds: xr.Dataset, mask: xr.DataArray, new_dim_name: str, use_argwhere=True, persist=True):
     mask.data = dask.array.asanyarray(mask.data)
     core_dim_labels = core_dim_labels_from_mask(mask, new_dim_name=new_dim_name, use_argwhere=use_argwhere)
+    if persist:
+        core_dim_labels, = dask.persist(core_dim_labels)
     core_dims = np.array([dim for dim, labels in core_dim_labels])
 
     new_variables = {}
