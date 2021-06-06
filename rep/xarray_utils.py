@@ -39,15 +39,24 @@ def core_dim_labels_from_mask(
         mask: xr.DataArray,
         new_dim_name: str,
         core_dims=None,
-        use_argwhere=False
+        use_argwhere=True
 ) -> List[Tuple[str, xr.DataArray]]:
     if core_dims is None:
         core_dims = mask.dims
 
+    # ensure that mask.data is a dask array
+    mask = xr.apply_ufunc(dask.array.asanyarray, mask, dask="allowed")
+    # compute chunk sizes manually to work around https://github.com/dask/dask/issues/7767
+    chunk_sizes, = dask.compute([b.sum() for b in mask.data.flatten().blocks])
+
     if use_argwhere:
         core_dim_locs = np.argwhere(mask.data)
-        if isinstance(core_dim_locs, dask.array.core.Array):
-            core_dim_locs = core_dim_locs.persist().compute_chunk_sizes()
+        # if isinstance(core_dim_locs, dask.array.core.Array):
+        #     core_dim_locs = core_dim_locs.persist().compute_chunk_sizes()
+        core_dim_locs._chunks = (
+            tuple(chunk_sizes),
+            tuple([1] * core_dim_locs.shape[-1])
+        )
 
         core_dim_locs_xr = []
         for i, dim in enumerate(core_dims):
@@ -62,15 +71,14 @@ def core_dim_labels_from_mask(
                 )
             ))
     else:
-        mask_data = dask.array.asanyarray(mask.data)
-        chunk_sizes, = dask.compute([b.sum() for b in mask_data.flatten().blocks])
-        chunk_sizes = (tuple(chunk_sizes),)
-
         core_dim_locs_xr = []
         for i, dim in enumerate(core_dims):
-            locs, _ = xr.broadcast(xr.apply_ufunc(dask.array.asanyarray, mask[dim]), mask)
+            locs, _ = xr.broadcast(
+                xr.apply_ufunc(dask.array.asanyarray, mask[dim], dask="allowed"),
+                mask
+            )
             labels = locs.data[mask.data]
-            labels._chunks = chunk_sizes
+            labels._chunks = (tuple(chunk_sizes),)
 
             core_dim_locs_xr.append((
                 dim,
@@ -113,10 +121,10 @@ def subset_variable(variable: xr.DataArray, core_dim_labels, new_dim_name, mask)
     return subset_xr
 
 
-def dataset_masked_indexing(ds: xr.Dataset, mask: xr.DataArray, new_dim_name: str, use_argwhere=False):
+def dataset_masked_indexing(ds: xr.Dataset, mask: xr.DataArray, new_dim_name: str, use_argwhere=True):
     mask.data = dask.array.asanyarray(mask.data)
     core_dim_labels = core_dim_labels_from_mask(mask, new_dim_name=new_dim_name, use_argwhere=use_argwhere)
-    core_dims = np.array([dim for dim, locs in core_dim_labels])
+    core_dims = np.array([dim for dim, labels in core_dim_labels])
 
     new_variables = {}
     for name, variable in ds.items():
