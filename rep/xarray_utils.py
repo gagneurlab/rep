@@ -95,7 +95,7 @@ def subset_variable(variable: xr.DataArray, core_dim_labels, new_dim_name, mask)
 
     flattened_mask = mask.data.flatten()
     flattened_variable_data = dask.array.reshape(
-        variable.data,
+        dask.array.asanyarray(variable.data),
         shape=(*flattened_mask.shape, *[variable.sizes[d] for d in other_dims])
     )
 
