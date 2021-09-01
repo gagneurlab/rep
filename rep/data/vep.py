@@ -53,12 +53,14 @@ class VEPTranscriptLevelVariantAggregator:
             metadata_transformer: Dict[str, Callable] = None,
             genotype_query="(GQ >= 80) & (DP >= 4) & (AF < 0.01)",
             variant_batch_size=1000,
+            filter_canonical=False,
     ):
         if not isinstance(vep_anno, VEPAnnotation):
             raise ValueError("Invalid vep_anno passed: " + str(vep_anno))
         self.vep_anno = vep_anno
         self.gt_fetcher = gt_fetcher
         self.variant_batch_size = variant_batch_size
+        self.filter_canonical = filter_canonical
 
         if variables is None:
             self.variables = {
@@ -102,6 +104,8 @@ class VEPTranscriptLevelVariantAggregator:
         #     variants, columns=cols, feature=gene, feature_type="gene", aggregation=None, preserve_all_variants=False,
         #     escape_columns=True
         # )
+        if self.filter_canonical:
+            vep_csq = vep_csq.query("`canonical` == True")
 
         # --- result: (gene, feature, variant) -> (vep features*)
         return vep_csq

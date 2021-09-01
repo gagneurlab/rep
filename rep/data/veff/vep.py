@@ -73,6 +73,7 @@ VEP_VARIABLES = [
     *VEP_CONSEQUENCES,
     *LOFTEE_FLAGS,
     *VEP_SCORES,
+    "canonical",
 ]
 
 VEP_DTYPES = {
