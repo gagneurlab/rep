@@ -289,7 +289,9 @@ class VEPGeneLevelVariantAggregator:
             gtex_tp: Union[GTExTranscriptProportions, str]
     ):
         self.vep_tl_aggr = vep_tl_aggr
-        if isinstance(gtex_tp, GTExTranscriptProportions):
+        if gtex_tp is None:
+            self.gtex_tp = None
+        elif isinstance(gtex_tp, GTExTranscriptProportions):
             self.gtex_tp = gtex_tp
         else:
             self.gtex_tp = GTExTranscriptProportions(gtex_tp)
@@ -335,18 +337,25 @@ class VEPGeneLevelVariantAggregator:
         # if transcript_level_batch is None:
         #     return None
 
-        max_transcript_df = self.gtex_tp.get_canonical_transcript(gene=gene, subtissue=subtissue)
-        max_transcript_df = max_transcript_df.rename("feature").to_frame().set_index("feature", append=True)
+        if self.gtex_tp is not None:
+            max_transcript_df = self.gtex_tp.get_canonical_transcript(gene=gene, subtissue=subtissue)
+            max_transcript_df = max_transcript_df.rename("feature").to_frame().set_index("feature", append=True)
 
-        # retval = {
-        #     # "gene": [gene],
-        #     # "subtissue": subtissue,
-        #     "metadata": {
-        #     }
-        # }
+            # retval = {
+            #     # "gene": [gene],
+            #     # "subtissue": subtissue,
+            #     "metadata": {
+            #     }
+            # }
 
-        # gene_level_df = max_transcript_df.join(transcript_level_batch["input"], how="inner")
-        gene_level_df = max_transcript_df.join(transcript_level_batch, how="inner")
+            # gene_level_df = max_transcript_df.join(transcript_level_batch["input"], how="inner")
+            gene_level_df = max_transcript_df.join(transcript_level_batch, how="inner")
+        else:
+            # simple broadcast to subtissues; assumes every gene only has one transcript
+            # => transcript filtering has to be done before!
+            idx = pd.DataFrame(index=pd.MultiIndex.from_product([subtissue, gene], names=["subtissue", "gene"]))
+            gene_level_df = idx.join(transcript_level_batch, how="inner")
+
         gene_level_df = gene_level_df.droplevel("feature")
         gene_level_df = gene_level_df.reorder_levels(["subtissue", "gene", "individual"])
         # retval["input"] = gene_level_df

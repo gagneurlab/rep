@@ -81,7 +81,7 @@ class GTExTranscriptProportions:
             for subt in subtissue:
                 yield gene, subt, val.transcript.item()
         else:
-            val_mean = val.mean(dim="subtissue")
+            val_mean = val.mean(dim="subtissue").fillna(0)
 
             mean_canonical_transcript = val_mean.argmax(dim="transcript")
             mean_canonical_transcript = val.transcript[mean_canonical_transcript].item()

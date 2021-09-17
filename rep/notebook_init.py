@@ -124,12 +124,20 @@ def init_ray(adjust_env=True, n_cpu=joblib.cpu_count()):
         # reset env variables with one core
         set_cpu_count_env(n_cpu=n_cpu)
 
-    from ray.util.dask import ray_dask_get
+    from ray.util.dask import ray_dask_get, dataframe_optimize
     from ray.util.joblib import register_ray
     register_ray()
 
-    dask.config.set(scheduler=ray_dask_get)
-    ray.worker.global_worker.run_function_on_all_workers(lambda args: dask.config.set(scheduler=ray_dask_get))
+    def dask_init_ray():
+        dask.config.set(
+            scheduler=ray_dask_get,
+            dataframe_optimize=dataframe_optimize,
+            shuffle='tasks',
+            # no idea how to set max_branch globally
+            # max_branch=float("inf"),
+        )
+    dask_init_ray()
+    ray.worker.global_worker.run_function_on_all_workers(lambda args: dask_init_ray())
 
     if adjust_env:
         def adjust_worker_env_fn(args):
