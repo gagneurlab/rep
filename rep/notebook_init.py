@@ -190,6 +190,89 @@ def init_dask(adjust_env=True, lifetime_restart=False):
 
     return client
 
+
+def init_spark(
+        app_name="REP",
+        memory=MEMORY_LIMIT,
+        memory_factor=0.9,
+        n_cpu=joblib.cpu_count(),
+        max_failures=4,
+        num_shuffle_partitions=None,
+        tmpdir=None,
+        max_result_size=None,
+        additional_packages=(),
+        additional_jars=(),
+        enable_glow=True,
+        enable_delta=False,
+        enable_delta_cache=True,
+        # enable_psql=True,
+        enable_sqlite=True,
+    ):
+    # parse memory
+    if isinstance(memory, str):
+        import humanfriendly
+        memory = humanfriendly.parse_size(memory)
+
+    # reduce total amount of memory that the Spark driver is allowed to use
+    memory = memory * memory_factor
+
+    from pyspark.sql import SparkSession
+
+    os.environ['PYSPARK_SUBMIT_ARGS'] = " ".join([
+        f'--driver-memory {int(memory // 1024)}k',
+        'pyspark-shell'
+    ])
+
+    spark = (
+        SparkSession.builder
+        .appName(app_name)
+        .config("spark.local.dir", os.environ.get("TMP") if tmpdir is None else tmpdir)
+        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
+        .config("spark.driver.maxResultSize", f"{int(memory)}b" if max_result_size is None else max_result_size)
+    )
+
+    if max_failures is not None:
+        spark = spark.config("spark.task.maxFailures", max_failures)
+    if num_shuffle_partitions is not None:
+        spark = spark.config("spark.sql.shuffle.partitions", num_shuffle_partitions)
+
+    packages=[*additional_packages]
+    jars=[*additional_jars]
+    if enable_glow:
+        packages.append("io.projectglow:glow-spark3_2.12:1.1.0")
+        spark = spark.config("spark.hadoop.io.compression.codecs", "io.projectglow.sql.util.BGZFCodec")
+    if enable_delta:
+        packages.append("io.delta:delta-core_2.12:1.0.0")
+        spark = (
+            spark
+            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
+            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
+        )
+        if enable_delta_cache:
+            # CAUTION: only enable when local storage is actually on local SSD!!
+            spark = spark.config("spark.databricks.io.cache.enabled", "true")
+    if enable_glow:
+        packages.append("io.projectglow:glow-spark3_2.12:1.1.0")
+    # if enable_psql:
+    #     packages.append("org.postgresql:postgresql:42.2.12")
+    if enable_sqlite:
+        packages.append("org.xerial:sqlite-jdbc:3.36.0.1")
+
+    if len(packages) > 0:
+        spark = spark.config("spark.jars.packages", ",".join(packages))
+    if len(jars) > 0:
+        spark = spark.config("spark.jars", ",".join(jars))
+
+    # spawn the session
+    spark = spark.getOrCreate()
+
+    if enable_glow:
+        import glow
+        glow.register(spark)
+
+    return spark
+
+
 def setup_plot_style():
     import plotnine as pn
     import matplotlib
