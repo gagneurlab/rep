@@ -90,6 +90,14 @@ def normalise_name(raw: str):
     return quote(raw.strip())
     # return re.sub('[^A-Za-z0-9_]+', '.', raw.strip())
 
+def denormalise_name(raw: str):
+    """
+    Returns a url-encoded version of a raw string
+    """
+    from urllib.parse import quote, unquote
+
+    return unquote(raw.strip())
+
 
 def __get_fields_info__(dtype: t.DataType, name: str = ""):
     ret = []
