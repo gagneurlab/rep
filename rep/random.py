@@ -11,6 +11,12 @@ try:
 except ImportError:
     xr = None
 
+def _broadcast(*args):
+    # broadcasting
+    if xr and all([isinstance(i, xr.DataArray) for i in args]):
+        return xr.align(*args)
+    else:
+        return np.broadcast_arrays(*args)
 
 class NegativeBinomial:
     r"""
@@ -95,15 +101,15 @@ class NegativeBinomial:
 
     @property
     def p(self):
-        return self.mean / (self.r + self.mean)
+        return self.mean.astype("float64") / (self.r + self.mean).astype("float64")
 
     @property
     def log_p(self):
-        return np.log(self.mean) - np.log(self.r + self.mean)
+        return np.log(self.mean.astype("float64")) - np.log((self.r + self.mean).astype("float64"))
 
     @property
     def log_1p(self):
-        return np.log(self.r) - np.log(self.r + self.mean)
+        return np.log(self.r.astype("float64")) - np.log((self.r + self.mean).astype("float64"))
 
     def sample(self, size=None):
         """
@@ -138,6 +144,10 @@ class NegativeBinomial:
         :param X: The data
         :return: numpy array of log-probabilitites
         """
+        from scipy.special import (
+            gammaln,
+            betainc,
+        )
         mu = self.mean
         r = self.r
 
@@ -166,12 +176,48 @@ class NegativeBinomial:
         log_1p = self.log_1p
 
         # broadcasting
-        if xr and isinstance(log_1p, xr.DataArray) and isinstance(r, xr.DataArray) and isinstance(X, xr.DataArray):
-            log_1p, r, X = xr.align(log_1p, r, X)
-        else:
-            log_1p, r, X = np.broadcast_arrays(log_1p, r, X)
+        log_1p, r, X = _broadcast(log_1p, r, X)
 
-        return betainc(r, 1. + X, np.exp(log_1p))
+        if xr:
+            return xr.apply_ufunc(scipy.stats.nbinom.cdf, X, r, np.exp(log_1p), dask="parallelized")
+        else:
+            return scipy.stats.nbinom.cdf(X, r, np.exp(log_1p))
+
+    def log_cdf(self, X):
+        r = self.r
+        log_1p = self.log_1p
+
+        # broadcasting
+        log_1p, r, X = _broadcast(log_1p, r, X)
+
+        if xr:
+            return xr.apply_ufunc(scipy.stats.nbinom.logcdf, X, r, np.exp(log_1p), dask="parallelized")
+        else:
+            return scipy.stats.nbinom.logcdf(X, r, np.exp(log_1p))
+
+    def pval(self, X, alternative=None):
+        """
+        Compute p-value for given set of counts
+        :param X: The data
+        :param alternative: If `alternative` is set to "less" or "greater" it will return
+            the corresponding alternative p-value instead of the default two-sided p-value
+        """
+        cdf = self.cdf(X)
+        # cdf = np.exp(self.log_cdf(X))
+        density = self.prob(X)
+
+        pval = np.fmin(0.5, np.fmin(cdf, 1 - cdf + density)) * 2
+
+        p_less = cdf
+        if alternative == "less":
+            return p_less
+
+        p_greater = 1 - cdf + density
+        if alternative == "greater":
+            return p_greater
+
+        return np.fmin(0.5, np.fmin(p_less, p_greater)) * 2
+        # return betainc(r, 1. + X, np.exp(log_1p))
 
 
 class Normal:
