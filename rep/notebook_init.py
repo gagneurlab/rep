@@ -228,6 +228,7 @@ def init_spark(
         .appName(app_name)
         .config("spark.local.dir", os.environ.get("TMP") if tmpdir is None else tmpdir)
         .config("spark.sql.execution.arrow.pyspark.enabled", "true")
+        .config("spark.sql.adaptive.enabled", "true")
         .config("spark.driver.maxResultSize", f"{int(memory)}b" if max_result_size is None else max_result_size)
     )
 
