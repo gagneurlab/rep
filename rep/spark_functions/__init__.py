@@ -6,4 +6,5 @@ from .reshape import (
     normalise_name,
     denormalise_name,
     rename_values,
+    select_nested_fields,
 )

@@ -118,6 +118,10 @@ def __get_fields_info__(dtype: t.DataType, name: str = ""):
 
 
 def normalise_fields_names(df: pyspark.sql.DataFrame, fieldname_normaliser=normalise_name):
+    """
+    Normalize all field names s.t. there are no special characters in the DataFrame schema.
+    Uses URL-encoding of special characters by default.
+    """
     return df.select([
         f.col("`{}`".format(field.name)).cast(__rename_nested_field__(field.dataType, fieldname_normaliser))
             .alias(fieldname_normaliser(field.name)) for field in df.schema.fields
@@ -125,6 +129,9 @@ def normalise_fields_names(df: pyspark.sql.DataFrame, fieldname_normaliser=norma
 
 
 def flatten(df: pyspark.sql.DataFrame, fieldname_normaliser=normalise_name):
+    """
+    Flatten all fields in Spark dataframe s.t. it can be natively loaded without nested-type support (e.g. Pandas)
+    """
     cols = []
     for child in __get_fields_info__(df.schema):
         if len(child) > 2:
@@ -150,4 +157,83 @@ def rename_values(col, map_dict: dict, default=None):
         return  mapping_expr.getItem(col)
     else:
         return f.coalesce(mapping_expr.getItem(col), default)
+
+
+def _recursive_select(fields, c=None, prefix: str = "", sep="."):
+    """
+    Recursively select fields and return tuple of string alias and pyspark.sql.column.Column
+    :param fields: nested dictionary/list of columns.
+        Example:
+
+        ```python
+        {
+            "vep": {
+                "any": [
+                  "transcript_ablation.max",
+                  "stop_gained.max",
+                ]
+            }
+        }
+        ```
+    :param c: struct-type column for which we want to select fields, or None if `fields` is already the leaf
+    :param prefix: current prefix of the column names
+    :param sep: separator of prefix and column alias
+    """
+    from collections.abc import Iterable
+
+    if isinstance(fields, str):
+        if c is None:
+            # 'fields' is leaf column
+            alias=fields
+            yield alias, f.col(fields)
+        else:
+            # we want to select a single column from the 'fields'-struct
+            alias=f"{prefix}{sep}{fields}"
+            yield alias, c[fields].alias(alias)
+    elif isinstance(fields, dict):
+        # we want to select multiple columns from the 'fields'-struct,
+        # with the dictionary key as additional prefix
+        for k, v in fields.items():
+            if c is None:
+                new_c = f.col(k)
+                new_prefix = k
+            else:
+                new_c = c[k]
+                new_prefix = f"{prefix}{sep}{k}"
+
+            yield from _recursive_select(v, c=new_c, prefix=new_prefix)
+    elif isinstance(fields, Iterable):
+        # we want to select multiple columns from the 'fields'-struct
+        for v in fields:
+            yield from _recursive_select(v, c=c, prefix=prefix)
+    else:
+        raise ValueError(f"Unknown type: {type(fields)}")
+
+
+def select_nested_fields(fields, sep="."):
+    """
+    Recursively select fields and return tuple of string alias and pyspark.sql.column.Column
+        Example:
+
+        ```python
+        select_nested_fields({
+            "vep": {
+                "any": [
+                  "transcript_ablation.max",
+                  "stop_gained.max",
+                ]
+            }
+        }, sep=".")
+        ```
+        Result:
+        ```python
+        [
+            ('vep.any.transcript_ablation.max', Column<'vep[any][transcript_ablation.max] AS `vep.any.transcript_ablation.max`'>),
+            ('vep.any.stop_gained.max', Column<'vep[any][stop_gained.max] AS `vep.any.stop_gained.max`'>)
+        ]
+        ```
+    :param fields: nested dictionary/list of columns.
+    :param sep: separator of prefix and column alias
+    """
+    return _recursive_select(fields, sep=sep)
 
