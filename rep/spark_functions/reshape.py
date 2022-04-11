@@ -238,7 +238,7 @@ def select_nested_fields(fields, sep="."):
     return _recursive_select(fields, sep=sep)
 
 
-def melt_df(
+def melt(
     df: pyspark.sql.DataFrame,
     id_vars: Iterable[str],
     value_vars: Iterable[str],
