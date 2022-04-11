@@ -250,7 +250,7 @@ def melt(
 
     :param df: The Dataframe on which the operation will be carried out.
     :param id_vars: Array of columns which will be the index to which the values of the columns will be matched to. 
-    :param value_vars: The actual values which will be extracted from these columns.
+    :param value_vars: Array of columns that contain the actual values to extract.
     :param var_name: The name of the variable column in the resulting DataFrame.
     :param value_name: The name of the value variable in the resulting DataFrame.
     :returns: Melted DataFrame
