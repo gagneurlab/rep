@@ -249,12 +249,11 @@ def melt(
     Convert :class:`DataFrame` from wide to long format.
 
     :param df: The Dataframe on which the operation will be carried out.
-    :param id_vars: array of columns which will be the index to which the values of the columns to which matched to. 
-        In out example religion is the only id_vars, as we want to map it to various income class.
-    :param value_vars: while id_vars help use to find the index of the values, this is the actual values will be extracted from these columns.
-    :param var_name: the name of the variable column in the resulting DataFrame.
-    :param value_name: this is the name of the value variable in the resulting DataFrame.
-    :returns: melted DataFrame
+    :param id_vars: Array of columns which will be the index to which the values of the columns will be matched to. 
+    :param value_vars: The actual values which will be extracted from these columns.
+    :param var_name: The name of the variable column in the resulting DataFrame.
+    :param value_name: The name of the value variable in the resulting DataFrame.
+    :returns: Melted DataFrame
     """
 
     # Create array<struct<variable: str, value: ...>>
