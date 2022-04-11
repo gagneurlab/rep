@@ -94,7 +94,11 @@ class NullRegressor(RegressorMixin):
         return self
 
     def predict(self, X=None):
+        X = np.asanyarray(X)
         return np.mean(X, axis=-1)
+    
+    def predict_proba(self, *args, **kwargs):
+        return self.predict(*args, **kwargs)
 
     def get_params(self, deep = False):
         return {}
