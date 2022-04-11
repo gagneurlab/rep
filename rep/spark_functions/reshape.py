@@ -1,4 +1,4 @@
-from typing import Dict, Union, List, Tuple
+from typing import Dict, Union, List, Tuple, Iterable
 import re
 
 from itertools import chain
@@ -236,4 +236,41 @@ def select_nested_fields(fields, sep="."):
     :param sep: separator of prefix and column alias
     """
     return _recursive_select(fields, sep=sep)
+
+
+def melt_df(
+    df: pyspark.sql.DataFrame,
+    id_vars: Iterable[str],
+    value_vars: Iterable[str],
+    var_name: str = "variable",
+    value_name: str = "value"
+) -> pyspark.sql.DataFrame:
+    """
+    Convert :class:`DataFrame` from wide to long format.
+
+    :param df: The Dataframe on which the operation will be carried out.
+    :param id_vars: array of columns which will be the index to which the values of the columns to which matched to. 
+        In out example religion is the only id_vars, as we want to map it to various income class.
+    :param value_vars: while id_vars help use to find the index of the values, this is the actual values will be extracted from these columns.
+    :param var_name: the name of the variable column in the resulting DataFrame.
+    :param value_name: this is the name of the value variable in the resulting DataFrame.
+    :returns: melted DataFrame
+    """
+
+    # Create array<struct<variable: str, value: ...>>
+    _vars_and_vals = f.array(*(
+        f.struct(
+            f.lit(c).alias(var_name), 
+            f.col(c).alias(value_name)
+        ) for c in value_vars
+    ))
+
+    # Add to the DataFrame and explode
+    _tmp = df.withColumn("_vars_and_vals", f.explode(_vars_and_vals))
+
+    cols = id_vars + [
+        f.col("_vars_and_vals")[x].alias(x) for x in [var_name, value_name]
+    ]
+    return _tmp.select(*cols)
+
 
