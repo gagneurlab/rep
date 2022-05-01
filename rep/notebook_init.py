@@ -223,6 +223,9 @@ def init_spark(
         'pyspark-shell'
     ])
 
+    from importlib.metadata import version
+    pyspark_version = version('pyspark')
+
     spark = (
         SparkSession.builder
         .appName(app_name)
@@ -243,10 +246,20 @@ def init_spark(
     packages=[*additional_packages]
     jars=[*additional_jars]
     if enable_glow:
-        packages.append("io.projectglow:glow-spark3_2.12:1.1.0")
+        if pyspark_version.startswith("3.1."):
+            packages.append("io.projectglow:glow-spark3_2.12:1.1.2")
+        elif pyspark_version.startswith("3.2."):
+            packages.append("io.projectglow:glow-spark3_2.12:1.2.1")
+        else:
+            raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
         spark = spark.config("spark.hadoop.io.compression.codecs", "io.projectglow.sql.util.BGZFCodec")
     if enable_delta:
-        packages.append("io.delta:delta-core_2.12:1.0.0")
+        if pyspark_version.startswith("3.1."):
+            packages.append("io.delta:delta-core_2.12:1.0.1")
+        elif pyspark_version.startswith("3.2."):
+            packages.append("io.delta:delta-core_2.12:1.2.1")
+        else:
+            raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
         spark = (
             spark
             .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
@@ -255,8 +268,6 @@ def init_spark(
         if enable_delta_cache:
             # CAUTION: only enable when local storage is actually on local SSD!!
             spark = spark.config("spark.databricks.io.cache.enabled", "true")
-    if enable_glow:
-        packages.append("io.projectglow:glow-spark3_2.12:1.1.0")
     # if enable_psql:
     #     packages.append("org.postgresql:postgresql:42.2.12")
     if enable_sqlite:
