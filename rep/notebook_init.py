@@ -10,7 +10,6 @@ import dask
 
 import sys
 
-
 __all__ = (
     "notebook_logger",
     "memory_limit",
@@ -18,6 +17,8 @@ __all__ = (
     "set_cpu_count_env",
     "init_ray",
     "init_dask",
+    "init_spark",
+    "init_spark_on_ray",
 )
 
 
@@ -92,8 +93,16 @@ def set_cpu_count_env(n_cpu=joblib.cpu_count()):
         os.environ[var] = str(n_cpu)
 
 
-def init_ray(adjust_env=True, n_cpu=joblib.cpu_count()):
+def init_ray(
+    adjust_env=True,
+    n_cpu=joblib.cpu_count(),
+    cluster_addr=None,
+    plasma_store_memory_fraction=0.05
+):
     import ray
+
+    if cluster_addr is None:
+        cluster_addr = os.environ.get("RAY_ADDRESS")
 
     spill_dir = os.path.join(os.environ["TMPDIR"], "ray_spill")
     try:
@@ -101,28 +110,32 @@ def init_ray(adjust_env=True, n_cpu=joblib.cpu_count()):
     except:
         pass
 
+    if cluster_addr is not None:
+        # we're in client mode
+        ray.init(
+            address=cluster_addr,
+        )
+    else:
+        if adjust_env:
+            # ensure initialization of workers' env variables with one core
+            set_cpu_count_env(n_cpu=1)
 
-    if adjust_env:
-        # ensure initialization of workers' env variables with one core
-        set_cpu_count_env(n_cpu=1)
-
-    # Start Ray.
-    # Tip: If you're connecting to an existing cluster, use ray.init(address="auto").
-    ray.init(
-        _memory=MEMORY_LIMIT * 0.7,
-        object_store_memory=MEMORY_LIMIT * 0.3,
-        num_cpus=n_cpu,
-        _temp_dir=os.environ["TMPDIR"],
-        _system_config={
-            "automatic_object_spilling_enabled": True,
-            "object_spilling_config": json.dumps(
-                {"type": "filesystem", "params": {"directory_path": spill_dir}},
-            )
-        },
-    )
-    if adjust_env:
-        # reset env variables with one core
-        set_cpu_count_env(n_cpu=n_cpu)
+        # Start Ray.
+        ray.init(
+            _memory=MEMORY_LIMIT * (1 - plasma_store_memory_fraction),
+            object_store_memory=MEMORY_LIMIT * plasma_store_memory_fraction,
+            num_cpus=n_cpu,
+            _temp_dir=os.environ["TMPDIR"],
+            _system_config={
+                "automatic_object_spilling_enabled": True,
+                "object_spilling_config": json.dumps(
+                    {"type": "filesystem", "params": {"directory_path": spill_dir}},
+                )
+            },
+        )
+        if adjust_env:
+            # reset env variables with one core
+            set_cpu_count_env(n_cpu=n_cpu)
 
     from ray.util.dask import ray_dask_get, dataframe_optimize
     from ray.util.joblib import register_ray
@@ -136,6 +149,7 @@ def init_ray(adjust_env=True, n_cpu=joblib.cpu_count()):
             # no idea how to set max_branch globally
             # max_branch=float("inf"),
         )
+
     dask_init_ray()
     ray.worker.global_worker.run_function_on_all_workers(lambda args: dask_init_ray())
 
@@ -191,23 +205,153 @@ def init_dask(adjust_env=True, lifetime_restart=False):
     return client
 
 
-def init_spark(
-        app_name="REP",
-        memory=MEMORY_LIMIT,
-        memory_factor=0.9,
-        n_cpu=joblib.cpu_count(),
+def _spark_conf(
         max_failures=4,
         num_shuffle_partitions=None,
         tmpdir=None,
         max_result_size=None,
         additional_packages=(),
         additional_jars=(),
+        additional_extensions=(),
         enable_glow=True,
+        enable_iceberg=True,
         enable_delta=False,
         enable_delta_cache=True,
         # enable_psql=True,
         enable_sqlite=True,
-    ):
+        enable_kryo_serialization=True,
+        kryo_buffer_max="512m"
+):
+    from importlib.metadata import version
+    pyspark_version = version('pyspark')
+
+    config = {}
+
+    config["spark.local.dir"] = os.environ.get("TMP") if tmpdir is None else tmpdir
+    config["spark.sql.execution.arrow.pyspark.enabled"] = "true"
+    config["spark.sql.adaptive.enabled"] = "true"
+    config["spark.sql.cbo.enabled"] = "true"
+    config["spark.sql.cbo.joinReorder.enabled"] = "true"
+    if max_result_size is not None:
+        config["spark.driver.maxResultSize"] = max_result_size
+    config['spark.sql.caseSensitive'] = "true"
+
+    if max_failures is not None:
+        config["spark.task.maxFailures"] = max_failures
+    if num_shuffle_partitions is not None:
+        config["spark.sql.shuffle.partitions"] = num_shuffle_partitions
+    if enable_kryo_serialization:
+        config["spark.serializer"] = "org.apache.spark.serializer.KryoSerializer"
+        config["spark.kryo.unsafe"] = "true"
+        config["spark.kryoserializer.buffer.max"] = kryo_buffer_max
+
+    packages = [*additional_packages]
+    jars = [*additional_jars]
+    extensions = [*additional_extensions]
+    if enable_glow:
+        if pyspark_version.startswith("3.1."):
+            packages.append("io.projectglow:glow-spark3_2.12:1.1.2")
+        elif pyspark_version.startswith("3.2."):
+            packages.append("io.projectglow:glow-spark3_2.12:1.2.1")
+        else:
+            raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
+        config["spark.hadoop.io.compression.codecs"] = "io.projectglow.sql.util.BGZFCodec"
+    if enable_delta:
+        if pyspark_version.startswith("3.1."):
+            packages.append("io.delta:delta-core_2.12:1.0.1")
+        elif pyspark_version.startswith("3.2."):
+            packages.append("io.delta:delta-core_2.12:1.2.1")
+        else:
+            raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
+
+        extensions.append("io.delta.sql.DeltaSparkSessionExtension")
+        config["spark.sql.catalog.spark_catalog"] = "org.apache.spark.sql.delta.catalog.DeltaCatalog"
+
+        if enable_delta_cache:
+            # CAUTION: only enable when local storage is actually on local SSD!!
+            config["spark.databricks.io.cache.enabled"] = "true"
+    if enable_iceberg:
+        if pyspark_version.startswith("3.1."):
+            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.1_2.12:0.14.0")
+        elif pyspark_version.startswith("3.2."):
+            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:0.14.0")
+        else:
+            raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
+
+        extensions.append("org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
+        config["spark.sql.catalog.spark_catalog"] = "org.apache.iceberg.spark.SparkSessionCatalog"
+        config["spark.sql.catalog.spark_catalog.type"] = "hive"
+        config["spark.sql.catalog.local"] = "org.apache.iceberg.spark.SparkCatalog"
+        config["spark.sql.catalog.local.type"] = "hadoop"
+        # config["spark.sql.catalog.local.warehouse"] = os.getcwd() + "/warehouse"
+
+    # if enable_psql:
+    #     packages.append("org.postgresql:postgresql:42.2.12")
+    if enable_sqlite:
+        packages.append("org.xerial:sqlite-jdbc:3.36.0.1")
+
+    if len(packages) > 0:
+        config["spark.jars.packages"] = ",".join(packages)
+    if len(jars) > 0:
+        config["spark.jars"] = ",".join(jars)
+    if len(extensions) > 0:
+        config["spark.sql.extensions"] = ",".join(extensions)
+
+
+    return config
+
+
+def init_spark_on_ray(
+        executor_cores=16,
+        executor_memory_overhead=0.95,
+        configs=None,
+        spark_conf_args=None,
+        **kwargs
+):
+    import ray
+    import raydp
+
+    if configs is None:
+        configs = {}
+    if spark_conf_args is None:
+        spark_conf_args = {}
+
+    spark_conf_args["enable_glow"] = spark_conf_args.get("enable_glow", True)
+    spark_conf_args["max_result_size"] = spark_conf_args.get("max_result_size", MEMORY_LIMIT)
+
+    spark_conf = _spark_conf(**spark_conf_args)
+    configs = {
+        **configs,
+        **spark_conf
+    }
+
+    spark = raydp.init_spark(
+        app_name="raydp",
+        num_executors=int(ray.available_resources()["CPU"] / executor_cores),
+        executor_cores=executor_cores,
+        executor_memory=int(
+            (ray.available_resources()["memory"] / ray.available_resources()["CPU"]) * executor_cores * executor_memory_overhead
+        ),
+        configs=configs,
+        #    configs={"raydp.executor.extraClassPath": os.environ["SPARK_HOME"] + "/jars/*"},
+        **kwargs,
+    )
+    if spark_conf_args["enable_glow"]:
+        import glow
+        glow.register(spark)
+
+    # spark.stop = raydp.stop_spark
+
+    return spark
+
+
+def init_spark(
+        app_name="REP",
+        memory=MEMORY_LIMIT,
+        memory_factor=0.9,
+        enable_glow=True,
+        **kwargs,
+):
     # parse memory
     if isinstance(memory, str):
         import humanfriendly
@@ -216,6 +360,8 @@ def init_spark(
     # reduce total amount of memory that the Spark driver is allowed to use
     memory = memory * memory_factor
 
+    kwargs["max_result_size"] = kwargs.get("max_result_size", f"{int(memory)}b")
+
     from pyspark.sql import SparkSession
 
     os.environ['PYSPARK_SUBMIT_ARGS'] = " ".join([
@@ -223,60 +369,17 @@ def init_spark(
         'pyspark-shell'
     ])
 
-    from importlib.metadata import version
-    pyspark_version = version('pyspark')
-
     spark = (
         SparkSession.builder
         .appName(app_name)
-        .config("spark.local.dir", os.environ.get("TMP") if tmpdir is None else tmpdir)
-        .config("spark.sql.execution.arrow.pyspark.enabled", "true")
-        .config("spark.sql.adaptive.enabled", "true")
-        .config("spark.sql.cbo.enabled", "true")
-        .config("spark.sql.cbo.joinReorder.enabled", "true")
-        .config("spark.driver.maxResultSize", f"{int(memory)}b" if max_result_size is None else max_result_size)
-        .config('spark.sql.caseSensitive', "true")
     )
 
-    if max_failures is not None:
-        spark = spark.config("spark.task.maxFailures", max_failures)
-    if num_shuffle_partitions is not None:
-        spark = spark.config("spark.sql.shuffle.partitions", num_shuffle_partitions)
-
-    packages=[*additional_packages]
-    jars=[*additional_jars]
-    if enable_glow:
-        if pyspark_version.startswith("3.1."):
-            packages.append("io.projectglow:glow-spark3_2.12:1.1.2")
-        elif pyspark_version.startswith("3.2."):
-            packages.append("io.projectglow:glow-spark3_2.12:1.2.1")
-        else:
-            raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
-        spark = spark.config("spark.hadoop.io.compression.codecs", "io.projectglow.sql.util.BGZFCodec")
-    if enable_delta:
-        if pyspark_version.startswith("3.1."):
-            packages.append("io.delta:delta-core_2.12:1.0.1")
-        elif pyspark_version.startswith("3.2."):
-            packages.append("io.delta:delta-core_2.12:1.2.1")
-        else:
-            raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
-        spark = (
-            spark
-            .config("spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension")
-            .config("spark.sql.catalog.spark_catalog", "org.apache.spark.sql.delta.catalog.DeltaCatalog")
-        )
-        if enable_delta_cache:
-            # CAUTION: only enable when local storage is actually on local SSD!!
-            spark = spark.config("spark.databricks.io.cache.enabled", "true")
-    # if enable_psql:
-    #     packages.append("org.postgresql:postgresql:42.2.12")
-    if enable_sqlite:
-        packages.append("org.xerial:sqlite-jdbc:3.36.0.1")
-
-    if len(packages) > 0:
-        spark = spark.config("spark.jars.packages", ",".join(packages))
-    if len(jars) > 0:
-        spark = spark.config("spark.jars", ",".join(jars))
+    config = _spark_conf(
+        enable_glow=enable_glow,
+        **kwargs
+    )
+    for k, v in config.items():
+        spark = spark.config(k, v)
 
     # spawn the session
     spark = spark.getOrCreate()
@@ -299,5 +402,3 @@ def setup_plot_style():
     matplotlib.rcParams['figure.dpi'] = 300
     matplotlib.rcParams['figure.figsize'] = [12, 8]
     matplotlib.rcParams["savefig.dpi"] = 450
-
-
