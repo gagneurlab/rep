@@ -304,10 +304,15 @@ def _spark_conf(
 def init_spark_on_ray(
         executor_cores=16,
         executor_memory_overhead=0.95,
+        driver_memory=None,
         configs=None,
         spark_conf_args=None,
         **kwargs
 ):
+    """
+
+    :param driver_memory: driver memory in kilobyte
+    """
     import ray
     import raydp
 
@@ -316,8 +321,17 @@ def init_spark_on_ray(
     if spark_conf_args is None:
         spark_conf_args = {}
 
+    if driver_memory is None:
+        driver_memory = int(MEMORY_LIMIT / 2)
+   
+    # set driver memory
+    os.environ['PYSPARK_SUBMIT_ARGS'] = " ".join([
+        f'--driver-memory {int(driver_memory // 1024)}k',
+        'pyspark-shell'
+    ])
+
     spark_conf_args["enable_glow"] = spark_conf_args.get("enable_glow", True)
-    spark_conf_args["max_result_size"] = spark_conf_args.get("max_result_size", MEMORY_LIMIT)
+    spark_conf_args["max_result_size"] = spark_conf_args.get("max_result_size", driver_memory)
 
     spark_conf = _spark_conf(**spark_conf_args)
     configs = {
