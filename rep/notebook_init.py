@@ -112,7 +112,7 @@ def init_ray(
 
     if cluster_addr is not None:
         # we're in client mode
-        ray.init(
+        ray_context = ray.init(
             address=cluster_addr,
         )
     else:
@@ -121,7 +121,7 @@ def init_ray(
             set_cpu_count_env(n_cpu=1)
 
         # Start Ray.
-        ray.init(
+        ray_context = ray.init(
             _memory=MEMORY_LIMIT * (1 - plasma_store_memory_fraction),
             object_store_memory=MEMORY_LIMIT * plasma_store_memory_fraction,
             num_cpus=n_cpu,
@@ -172,7 +172,7 @@ def init_ray(
         # set number of threads in main process' env variables
         set_cpu_count_env(n_cpu)
 
-    return ray.cluster_resources()
+    return ray_context
 
 
 def init_dask(adjust_env=True, lifetime_restart=False):
@@ -304,6 +304,7 @@ def _spark_conf(
 def init_spark_on_ray(
         executor_cores=16,
         executor_memory_overhead=0.95,
+        total_num_cores=None,
         driver_memory=None,
         configs=None,
         spark_conf_args=None,
@@ -312,6 +313,8 @@ def init_spark_on_ray(
     """
 
     :param driver_memory: driver memory in kilobyte
+    :param total_num_cores: total number of cores to use;
+        Will use all available cores by default.
     """
     import ray
     import raydp
@@ -323,7 +326,10 @@ def init_spark_on_ray(
 
     if driver_memory is None:
         driver_memory = int(MEMORY_LIMIT / 2)
-   
+    
+    if total_num_cores is None:
+        total_num_cores = int(ray.available_resources()["CPU"])
+
     # set driver memory
     os.environ['PYSPARK_SUBMIT_ARGS'] = " ".join([
         f'--driver-memory {int(driver_memory // 1024)}k',
@@ -332,11 +338,13 @@ def init_spark_on_ray(
 
     spark_conf_args["enable_glow"] = spark_conf_args.get("enable_glow", True)
     spark_conf_args["max_result_size"] = spark_conf_args.get("max_result_size", driver_memory)
+    spark_conf_args["num_shuffle_partitions"] = spark_conf_args.get("num_shuffle_partitions", total_num_cores * 2)
 
     spark_conf = _spark_conf(**spark_conf_args)
     configs = {
+        "spark.default.parallelism": total_num_cores,
+        **spark_conf,
         **configs,
-        **spark_conf
     }
 
     spark = raydp.init_spark(
@@ -344,7 +352,7 @@ def init_spark_on_ray(
         num_executors=int(ray.available_resources()["CPU"] / executor_cores),
         executor_cores=executor_cores,
         executor_memory=int(
-            (ray.available_resources()["memory"] / ray.available_resources()["CPU"]) * executor_cores * executor_memory_overhead
+            (ray.available_resources()["memory"] / total_num_cores) * executor_cores * executor_memory_overhead
         ),
         configs=configs,
         #    configs={"raydp.executor.extraClassPath": os.environ["SPARK_HOME"] + "/jars/*"},
