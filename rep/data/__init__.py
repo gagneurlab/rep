@@ -1,4 +1,4 @@
-from . import maf
+#from . import maf
 
 # from .variantdb import (
 #     # GTExTranscriptProportions,
