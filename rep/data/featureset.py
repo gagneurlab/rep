@@ -61,6 +61,7 @@ def join_featuresets(
     fill_values: Dict[str, object] = None,
     join="outer",
     initial_df: pyspark.sql.dataframe.DataFrame = None,
+    broadcast_columns: Dict[str, pyspark.sql.dataframe.DataFrame]=None, 
     ignore_missing_columns=True,
 ):
     """
@@ -75,11 +76,11 @@ def join_featuresets(
     :param join: Type of the join.
     :param initial_df: Spark dataframe to join on all loaded feature sets.
         Especially useful for left joins.
+    :param broadcast_columns: A dictionary of column -> dataframe pairs where each dataframe has
+        the distinct values which should be used for broadcasting the column
     :param ignore_missing_columns: Ignore if an index column is missing in all dataframes
     :returns: Spark dataframe
     """
-    full_df = initial_df
-
     # first, transform the feature sets and decide for a join order
     partial_column_sets = defaultdict(list)
     full_column_sets = []
@@ -129,31 +130,34 @@ def join_featuresets(
             *set(index_cols).difference(join_column_set),
         }
 
-    distinct_values = dict()
-    for col in cross_join_columns:
-        # get all datasets that have the column
-        dfs = []
-        for idx, df in joint_partial_column_sets.items():
-            if col in idx:
-                # get distinct values from df
-                df_distinct = df.select(f.col(col)).distinct()
-                dfs.append(df_distinct)
-
-        distinct_values[col] = reduce(lambda left, right: left.union(right), dfs).distinct()
+    # distinct_values = dict()
+    # for col in cross_join_columns:
+    #     # get all datasets that have the column
+    #     dfs = []
+    #     for idx, df in joint_partial_column_sets.items():
+    #         if col in idx:
+    #             # get distinct values from df
+    #             df_distinct = df.select(f.col(col)).distinct()
+    #             dfs.append(df_distinct)
+    #
+    #     distinct_values[col] = reduce(lambda left, right: left.union(right), dfs).distinct()
 
     # now perform all cross-joins
     joint_full_column_sets = []
     for idx, df in joint_partial_column_sets.items():
         df_cross_join_columns = set(index_cols).difference(idx)
         for col in df_cross_join_columns:
-            df = df.crossJoin(distinct_values[col])
+            if col in broadcast_columns:
+                df = df.crossJoin(distinct_values[col])
 
         joint_full_column_sets.append(df)
 
     # finally, join all full datasets
-    if full_df is None and join == "outer":
+    if initial_df is None and join == "outer":
         full_df = reduce(
-            lambda left, right: left.join(right, on=index_cols, how="outer"),
+            lambda left, right: left.join(right, on=[
+                c for c in index_cols if c in left.columns and c in right.columns
+            ], how="outer"),
             joint_full_column_sets,
         )
     else:
