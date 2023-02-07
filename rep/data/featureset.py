@@ -164,8 +164,13 @@ def join_featuresets(
             joint_full_column_sets,
         )
     else:
+        full_df = initial_df
         for other_df in joint_full_column_sets:
-            full_df = full_df.join(other_df, on=index_cols, how=join)
+            full_df = full_df.join(
+                other_df,
+                on=[c for c in index_cols if c in full_df.columns and c in other_df.columns],
+                how=join,
+            )
 
     if fill_values is not None:
         full_df = full_df.fillna(fill_values)
