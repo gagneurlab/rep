@@ -81,6 +81,9 @@ def join_featuresets(
     :param ignore_missing_columns: Ignore if an index column is missing in all dataframes
     :returns: Spark dataframe
     """
+    if broadcast_columns is None:
+        broadcast_columns = []
+
     # first, transform the feature sets and decide for a join order
     partial_column_sets = defaultdict(list)
     full_column_sets = []
