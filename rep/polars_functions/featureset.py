@@ -152,7 +152,7 @@ def join_featuresets(
         df_cross_join_columns = set(index_cols).difference(idx)
         for col in df_cross_join_columns:
             if col in broadcast_columns:
-                df = df.join(broadcast_columns[col], how="cross")
+                df = broadcast_columns[col].join(df, how="cross")
 
         joint_full_column_sets.append(df)
 
