@@ -172,15 +172,19 @@ def get_prc_curve_df_single(y_true, y_pred, binary_as_point=True):
             recall = [metrics.recall_score(y_true, binarized_y_pred)]
             precision = [metrics.precision_score(y_true, binarized_y_pred)]
             thresholds = [(float(max_y_pred) - float(min_y_pred)) / 2]
+        else:
+            binary_as_point = False
+
+    # if we do not care about binary predictors:
+    if not binary_as_point:
+        precision, recall, thresholds = metrics.precision_recall_curve(
+            y_true=y_true,
+            probas_pred=y_pred,
+        )
+        recall = recall[: len(thresholds)]
+        precision = precision[: len(thresholds)]
 
     auc = metrics.average_precision_score(y_true=y_true, y_score=y_pred)
-
-    precision, recall, thresholds = metrics.precision_recall_curve(
-        y_true=y_true,
-        probas_pred=y_pred,
-    )
-    recall = recall[: len(thresholds)]
-    precision = precision[: len(thresholds)]
 
     prc_df = (
         pd.DataFrame(
