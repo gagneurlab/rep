@@ -142,13 +142,12 @@ def init_ray(
     register_ray()
 
     def dask_init_ray():
-        dask.config.set(
-            scheduler=ray_dask_get,
-            dataframe_optimize=dataframe_optimize,
-            shuffle='tasks',
+        dask.config.set({
+            "scheduler": ray_dask_get,
+            "dataframe_optimize": dataframe_optimize,
             # no idea how to set max_branch globally
             # max_branch=float("inf"),
-        )
+        })
 
     dask_init_ray()
     ray.worker.global_worker.run_function_on_all_workers(lambda args: dask_init_ray())
@@ -213,7 +212,7 @@ def _spark_conf(
         additional_packages=(),
         additional_jars=(),
         additional_extensions=(),
-        enable_glow=True,
+        enable_glow=False,
         enable_iceberg=True,
         enable_delta=False,
         enable_delta_cache=True,
@@ -260,7 +259,11 @@ def _spark_conf(
         if pyspark_version.startswith("3.1."):
             packages.append("io.delta:delta-core_2.12:1.0.1")
         elif pyspark_version.startswith("3.2."):
-            packages.append("io.delta:delta-core_2.12:1.2.1")
+            packages.append("io.delta:delta-core_2.12:2.0.1")
+        elif pyspark_version.startswith("3.3."):
+            packages.append("io.delta:delta-core_2.12:2.3.0")
+        elif pyspark_version.startswith("3.4."):
+            packages.append("io.delta:delta-core_2.12:2.4.0")
         else:
             raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
 
@@ -272,17 +275,21 @@ def _spark_conf(
             config["spark.databricks.io.cache.enabled"] = "true"
     if enable_iceberg:
         if pyspark_version.startswith("3.1."):
-            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.1_2.12:0.14.0")
+            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.1_2.12:1.3.0")
         elif pyspark_version.startswith("3.2."):
-            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:0.14.0")
+            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.2_2.12:1.3.0")
+        elif pyspark_version.startswith("3.3."):
+            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.3.0")
+        elif pyspark_version.startswith("3.4."):
+            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.3.0")
         else:
             raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
 
         extensions.append("org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
         config["spark.sql.catalog.spark_catalog"] = "org.apache.iceberg.spark.SparkSessionCatalog"
         config["spark.sql.catalog.spark_catalog.type"] = "hive"
-        config["spark.sql.catalog.local"] = "org.apache.iceberg.spark.SparkCatalog"
-        config["spark.sql.catalog.local.type"] = "hadoop"
+        # config["spark.sql.catalog.local"] = "org.apache.iceberg.spark.SparkCatalog"
+        # config["spark.sql.catalog.local.type"] = "hadoop"
         # config["spark.sql.catalog.local.warehouse"] = os.getcwd() + "/warehouse"
 
     # if enable_psql:
@@ -336,7 +343,7 @@ def init_spark_on_ray(
         'pyspark-shell'
     ])
 
-    spark_conf_args["enable_glow"] = spark_conf_args.get("enable_glow", True)
+    spark_conf_args["enable_glow"] = spark_conf_args.get("enable_glow", False)
     spark_conf_args["max_result_size"] = spark_conf_args.get("max_result_size", driver_memory)
     spark_conf_args["num_shuffle_partitions"] = spark_conf_args.get("num_shuffle_partitions", total_num_cores * 2)
 
@@ -371,7 +378,7 @@ def init_spark(
         app_name="REP",
         memory=MEMORY_LIMIT,
         memory_factor=0.9,
-        enable_glow=True,
+        enable_glow=False,
         **kwargs,
 ):
     # parse memory
