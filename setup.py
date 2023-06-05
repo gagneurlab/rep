@@ -4,16 +4,6 @@
 from setuptools import setup, find_packages
 
 requirements = [
-    # "cyvcf2",
-    # "openpyxl",
-    # "xgboost",
-    "joblib",
-    # "deepdish",
-    "dask",
-    "matplotlib",
-    "numpy",
-    "pandas",
-    "pyarrow",
 ]
 
 test_requirements = [
@@ -32,13 +22,30 @@ setup(
     packages=find_packages(),
     install_requires=requirements,
     extras_require={
-        "develop": ["bumpversion",
-                    "wheel",
-                    "jedi",
-                    "epc",
-                    "pytest",
-                    "pytest-pep8",
-                    "pytest-cov"],
+        "develop": [
+            "bumpversion",
+            "wheel",
+            "jedi",
+            "epc",
+            "pytest",
+            "pytest-pep8",
+            "pytest-cov"
+        ],
+        "dask": [
+            "dask",
+            "joblib",
+        ],
+        "ray": [
+            "ray",
+        ],
+        "spark": [
+            "pyspark",
+            "pyarrow",
+        ],
+        "polars". [
+            "polars",
+            "pyarrow",
+        ]
     },
     entry_points={'console_scripts': ['rep = rep.__main__:main']},
     license="MIT license",
