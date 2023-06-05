@@ -42,7 +42,7 @@ setup(
             "pyspark",
             "pyarrow",
         ],
-        "polars". [
+        "polars": [
             "polars",
             "pyarrow",
         ]
