@@ -1,4 +1,3 @@
-
 from .reshape import (
     displayHead,
     flatten,
@@ -9,3 +8,5 @@ from .reshape import (
     select_nested_fields,
     melt,
 )
+
+from .featureset import *

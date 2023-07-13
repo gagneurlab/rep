@@ -7,7 +7,7 @@ import pyspark
 import pyspark.sql.types as t
 import pyspark.sql.functions as f
 
-import rep.spark_functions as sf
+from .reshape import select_nested_fields 
 
 import logging
 
@@ -37,7 +37,7 @@ def transform_featureset(
     :returns: Spark dataframe
     """
     # create column selection from variables
-    feature_columns = list(sf.select_nested_fields(variables))
+    feature_columns = list(select_nested_fields(variables))
     # rename feature columns: add prefix
     feature_columns = [
         col.alias(f"feature.{fset_name}@{alias}") for alias, col in feature_columns

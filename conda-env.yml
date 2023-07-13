@@ -1,9 +1,6 @@
 name: rep
 channels:
   - conda-forge
-  - bioconda
-  - plotly
-  - defaults
 dependencies:
   - xarray
   - pyarrow
@@ -11,10 +8,10 @@ dependencies:
   - dask
   - numpy
   - pandas
-  - pyranges
   - pytest
   - scipy
   - scikit-learn
   - joblib
-  - matplotlib
-  - pip:
+  - openjdk=11
+  - pyspark=3.2
+  - pip
