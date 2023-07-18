@@ -1,14 +1,9 @@
 import os
 import sys
 
-import psutil
-
 import json
-
+import psutil
 import joblib
-import dask
-
-import sys
 
 __all__ = (
     "notebook_logger",
@@ -137,6 +132,7 @@ def init_ray(
             # reset env variables with one core
             set_cpu_count_env(n_cpu=n_cpu)
 
+    import dask
     from ray.util.dask import ray_dask_get, dataframe_optimize
     from ray.util.joblib import register_ray
     register_ray()
@@ -178,6 +174,7 @@ def init_dask(adjust_env=True, lifetime_restart=False):
     if adjust_env:
         set_cpu_count_env()
 
+    import dask
     import dask.distributed
 
     # from dask.cache import Cache
