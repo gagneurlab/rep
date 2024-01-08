@@ -424,7 +424,7 @@ def setup_plot_style():
 
     pn.themes.theme_set(pn.theme_bw)
 
-    matplotlib.style.use('seaborn')
+    matplotlib.style.use('seaborn-v0_8')
     matplotlib.rcParams['figure.dpi'] = 300
     matplotlib.rcParams['figure.figsize'] = [12, 8]
     matplotlib.rcParams["savefig.dpi"] = 450
