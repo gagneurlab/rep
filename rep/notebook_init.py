@@ -95,6 +95,9 @@ def init_ray(
     plasma_store_memory_fraction=0.05
 ):
     import ray
+    import dask
+    from ray.util.dask import ray_dask_get, dataframe_optimize
+    from ray.util.joblib import register_ray
 
     if cluster_addr is None:
         cluster_addr = os.environ.get("RAY_ADDRESS")
@@ -105,12 +108,33 @@ def init_ray(
     except:
         pass
 
+    worker_process_setup_hooks = []
+    
+    def dask_init_ray():
+        dask.config.set({
+            "scheduler": ray_dask_get,
+            "dataframe_optimize": dataframe_optimize,
+            # no idea how to set max_branch globally
+            # max_branch=float("inf"),
+        })
+    worker_process_setup_hooks.append(dask_init_ray)
+
+    def adjust_worker_env():
+        # make sure that OMP_NUM_THREADS, etc. is set to 1 on all workers but not on the driver
+        set_cpu_count_env(n_cpu=1)
+    if adjust_env:
+        worker_process_setup_hooks.append(adjust_worker_env)
+
     if cluster_addr is not None:
         # we're in client mode
         ray_context = ray.init(
             address=cluster_addr,
         )
     else:
+        def worker_setup_fn():
+            for fn in worker_process_setup_hooks:
+                fn()
+
         if adjust_env:
             # ensure initialization of workers' env variables with one core
             set_cpu_count_env(n_cpu=1)
@@ -127,45 +151,16 @@ def init_ray(
                     {"type": "filesystem", "params": {"directory_path": spill_dir}},
                 )
             },
+            runtime_env={
+                "worker_process_setup_hook": worker_setup_fn
+            }
         )
         if adjust_env:
             # reset env variables with one core
             set_cpu_count_env(n_cpu=n_cpu)
 
-    import dask
-    from ray.util.dask import ray_dask_get, dataframe_optimize
-    from ray.util.joblib import register_ray
     register_ray()
-
-    def dask_init_ray():
-        dask.config.set({
-            "scheduler": ray_dask_get,
-            "dataframe_optimize": dataframe_optimize,
-            # no idea how to set max_branch globally
-            # max_branch=float("inf"),
-        })
-
     dask_init_ray()
-    ray.worker.global_worker.run_function_on_all_workers(lambda args: dask_init_ray())
-
-    if adjust_env:
-        def adjust_worker_env_fn(args):
-            if "worker" in args:
-                worker = args["worker"]
-            else:
-                worker = ray.worker.global_worker
-
-            if worker.mode in (ray.LOCAL_MODE, ray.SCRIPT_MODE):
-                # worker is driver; do not change environment
-                return
-            else:
-                # make sure that OMP_NUM_THREADS, etc. is set to 1 on all workers but not on the driver
-                set_cpu_count_env(n_cpu=1)
-
-        ray.worker.global_worker.run_function_on_all_workers(adjust_worker_env_fn)
-
-        # set number of threads in main process' env variables
-        set_cpu_count_env(n_cpu)
 
     return ray_context
 
