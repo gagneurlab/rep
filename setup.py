@@ -43,7 +43,7 @@ setup(
             "pyarrow",
         ],
         "polars": [
-            "polars",
+            "polars~=0.20.4",
             "pyarrow",
         ]
     },
