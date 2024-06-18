@@ -244,6 +244,10 @@ def _spark_conf(
             packages.append("io.projectglow:glow-spark3_2.12:1.1.2")
         elif pyspark_version.startswith("3.2."):
             packages.append("io.projectglow:glow-spark3_2.12:1.2.1")
+        elif pyspark_version.startswith("3.4."):
+            packages.append("io.projectglow:glow-spark3_2.12:2.0.1")
+        elif pyspark_version.startswith("3.5."):
+            packages.append("io.projectglow:glow-spark3_2.12:2.0.1")
         else:
             raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
         config["spark.hadoop.io.compression.codecs"] = "io.projectglow.sql.util.BGZFCodec"
