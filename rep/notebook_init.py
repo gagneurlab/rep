@@ -109,7 +109,7 @@ def init_ray(
         pass
 
     worker_process_setup_hooks = []
-    
+
     def dask_init_ray():
         dask.config.set({
             "scheduler": ray_dask_get,
@@ -260,8 +260,10 @@ def _spark_conf(
             packages.append("io.delta:delta-core_2.12:2.3.0")
         elif pyspark_version.startswith("3.4."):
             packages.append("io.delta:delta-core_2.12:2.4.0")
+        elif pyspark_version.startswith("3.5."):
+            packages.append("io.delta:delta-spark_2.12:3.2.0")
         else:
-            raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
+            raise ValueError(f"Unknown delta lake version for PySpark v{pyspark_version}!")
 
         extensions.append("io.delta.sql.DeltaSparkSessionExtension")
         config["spark.sql.catalog.spark_catalog"] = "org.apache.spark.sql.delta.catalog.DeltaCatalog"
@@ -277,9 +279,11 @@ def _spark_conf(
         elif pyspark_version.startswith("3.3."):
             packages.append("org.apache.iceberg:iceberg-spark-runtime-3.3_2.12:1.3.0")
         elif pyspark_version.startswith("3.4."):
-            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.3.0")
+            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.4_2.12:1.5.2")
+        elif pyspark_version.startswith("3.5."):
+            packages.append("org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.5.2")
         else:
-            raise ValueError(f"Unknown glow version for PySpark v{pyspark_version}!")
+            raise ValueError(f"Unknown iceberg version for PySpark v{pyspark_version}!")
 
         extensions.append("org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions")
         config["spark.sql.catalog.spark_catalog"] = "org.apache.iceberg.spark.SparkSessionCatalog"
@@ -329,7 +333,7 @@ def init_spark_on_ray(
 
     if driver_memory is None:
         driver_memory = int(MEMORY_LIMIT / 2)
-    
+
     if total_num_cores is None:
         total_num_cores = int(ray.available_resources()["CPU"])
 
